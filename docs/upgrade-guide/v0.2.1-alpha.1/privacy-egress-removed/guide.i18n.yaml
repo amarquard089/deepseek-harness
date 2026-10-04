@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-alpha.1/privacy-egress-removed/guide.md
+/:
+  en: b124391344397d52
+  zh: 867f31b416a7fc4d
+/privacy-egress-removal:
+  en: 2409f147ce759bc0
+  zh: 52e0d8376144ed52
+/privacy-egress-removal/change:
+  en: 329189b6240bf95d
+  zh: 4c89c5ae458bfefe
+/privacy-egress-removal/migration:
+  en: 0b338d2bd919285e
+  zh: 0a6db695f372d021

@@ -30,4 +30,4 @@ Neither the advertised URL nor the fence protects the listening port itself, so 
 
 Terminate TLS at the proxy. An `http://` advertised root sends the launch token and the session cookie unencrypted, and an `https://` root encrypts only the browser-to-proxy leg. The printed URL carries a process credential, so share it only with intended users.
 
-The [Web app reference](../../../packages/bundle/web-app/README.md#public-deployments) owns the `--public-url` and `--trusted-host` command-line contract and the `publicUrl` and `trustedHosts` fields.
+The [Web app reference](../../../packages/bundle/web-app/README.md) owns the `--public-url` and `--trusted-host` command-line contract and the `publicUrl` and `trustedHosts` fields.

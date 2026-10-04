@@ -13,7 +13,7 @@ kind: "package-bundle"
 
 ## 目录
 
-- [使用本包](#use-this-package)
+- [使用本包]()
 - [模型体验](#model-experience)
 - [已知限制与延期工作](#known-limitations-and-deferred-work)
 - [开发备注](#dev-note)
@@ -31,9 +31,9 @@ kind: "package-bundle"
 
 `DSH_MAX_TOKENS_AS_SUCCESS` 保留 SDK 部署映射：未设置或 JSON `true` 把 token 达限的 subagent 完成报告为已接受，JSON `false` 则报告为错误。模型提供方／模型与工作区 cwd 通过 SDK 初始化请求传入；base profile 拥有适配器、工具、持久化、策略、settings 与 credentials。
 
-SDK 使用 base 默认提供的 `read`、`write` 和 `edit`。要添加 `str_replace_editor`，请使用 [base 配置指南](../base/README.zh.md#use-this-package)中的显式插入 patch。独立的 `sdk-minimal` profile 自行决定其工具选择。
+SDK 使用 base 默认提供的 `read`、`write` 和 `edit`。要添加 `str_replace_editor`，请使用 [base 配置指南](../base/README.zh.md)中的显式插入 patch。独立的 `sdk-minimal` profile 自行决定其工具选择。
 
-打包的 Python runtime 默认启用 [Office 运行时查询与 skills](../../skill/tool-workspace-dependencies/README.zh.md#use-this-package)。`DSH_PRIMARY_RUNTIME` 覆盖随包 payload；空值禁用两行。没有载体默认路径的源码启动仍需显式启用。工具原位读取 payload。profile patch 可独立于 `workspace-dependencies` 禁用 `skill-office` 或替换其 `assetRoot`；同名文件系统 skills 优先于随包 skills。打包与配置见 [runtime 包](../../../python/sdk-runtime/README.zh.md)。
+打包的 Python runtime 默认启用 [Office 运行时查询与 skills](../../skill/tool-workspace-dependencies/README.zh.md)。`DSH_PRIMARY_RUNTIME` 覆盖随包 payload；空值禁用两行。没有载体默认路径的源码启动仍需显式启用。工具原位读取 payload。profile patch 可独立于 `workspace-dependencies` 禁用 `skill-office` 或替换其 `assetRoot`；同名文件系统 skills 优先于随包 skills。打包与配置见 [runtime 包](../../../python/sdk-runtime/README.zh.md)。
 
 -----
 

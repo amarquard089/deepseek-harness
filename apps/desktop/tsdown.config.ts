@@ -11,9 +11,11 @@ import { packagedImportsPlugin } from './scripts/desktop-bundle-imports.mjs'
 // not order ahead of this package (root package.json build:lib:host).
 const manifest = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
   dependencies: Record<string, string>
+  devDependencies: Record<string, string>
 }
 /** electron-builder ships the manifest `dependencies` next to the main bundle; Electron provides `electron` and Node. */
 const mainProcessImports = { packages: new Set(['electron', ...Object.keys(manifest.dependencies)]), nodeBuiltins: true }
+const workspaceDevDependencies = Object.keys(manifest.devDependencies).filter(name => name.startsWith('@deepseek-ai/'))
 /**
  * The `require` polyfill of a sandboxed preload resolves only these modules
  * (Electron: Process Sandboxing, "Preload scripts").
@@ -35,7 +37,7 @@ const clientVersionDefine = { 'process.env.DSH_CLIENT_VERSION': JSON.stringify(c
 export default defineConfig([
   {
     entry: ['lib/types/command-manager-entry.js'],
-    plugins: [packagedImportsPlugin({ packages: new Set(), nodeBuiltins: true })],
+    plugins: [packagedImportsPlugin({ packages: new Set(['@deepseek-ai/dsh-atomic-write']), nodeBuiltins: true })],
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
@@ -88,7 +90,7 @@ export default defineConfig([
     fixedExtension: false,
     dts: false,
     clean: false,
-    deps: { neverBundle: ['electron'] },
+    deps: { alwaysBundle: workspaceDevDependencies, neverBundle: ['electron'] },
   },
   ...(['preload-app', 'preload-welcome', 'preload-platform-account', 'preload-mandatory', 'preload-update-dialog'] as const).map(name => ({
     // Sandboxed Electron preloads run as CommonJS even though the application package is ESM.

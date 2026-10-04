@@ -9,6 +9,8 @@ export interface DesktopUpdateScheduleConfig {
   readonly intervalMs: number
   readonly maxBackoffMs: number
   readonly jitter: number
+  /** Whether a completed check may start another background check. */
+  readonly autoSchedule?: boolean
 }
 
 /**
@@ -87,7 +89,7 @@ export class DesktopUpdateSchedule {
     // Joined manual callers publish through the coordinator but advance the retry delay only once.
     if (--this.activeChecks !== 0) return
     this.pending = undefined
-    this.schedule(failed)
+    if (this.config.autoSchedule !== false) this.schedule(failed)
   }
 
   private schedule(failed: boolean): void {

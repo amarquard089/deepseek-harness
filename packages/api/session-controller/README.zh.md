@@ -6,7 +6,6 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
-桌面埋点遵循[产品采集策略](../../client/product-analytics/README.zh.md)及其启动时开关，不包含 Web 使用情况。
 
 ## 概述
 

@@ -30,4 +30,4 @@ dsh --profile web --public-url https://app.example/ui/ --trusted-host app.exampl
 
 在代理处终止 TLS。`http://` 公告根会以明文发送启动 token 与会话 cookie，而 `https://` 根只加密浏览器到代理这一段。打印的 URL 携带进程凭据，只应与预期用户分享。
 
-[Web 应用参考](../../../packages/bundle/web-app/README.zh.md#public-deployments)负责 `--public-url` 与 `--trusted-host` 的命令行约定，以及 `publicUrl` 与 `trustedHosts` 字段。
+[Web 应用参考](../../../packages/bundle/web-app/README.zh.md)负责 `--public-url` 与 `--trusted-host` 的命令行约定，以及 `publicUrl` 与 `trustedHosts` 字段。

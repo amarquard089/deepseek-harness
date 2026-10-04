@@ -88,5 +88,3 @@ Status: implemented
 DeepSeek 官方请求会把存活包版本发送到解析后的 `baseURL`，包括已配置 gateway。除非关闭会话日志上传，否则符合条件的请求还会携带新的未接受会话事件，每次最多 `maxBytes`。这些字段对模型不可见，不增加提示词 token，也不改变 KV Cache，但可能显著增大 HTTP 正文。Manifest 解析、字段冲突、接受记录或提供方 schema 拒绝会使模型请求失败，而不会静默丢弃元数据。合并后的正文无法序列化是例外：请求不带扩展字段继续发送，并记录一条告警。
 
 `delivery-accepted` 事件会成为权威日志的一部分，并在后续请求中自行交付。崩溃恢复可能重复后缀，但不会根据 assistant 输出推断接受，也不会创建第二份本地游标存储。缺少存活会话的直接调用会省略会话字段；宿主包清单仍然可用。
-
-[DeepSeek 参考](../../../../packages/llm/llm-deepseek/README.zh.md)定义正文之外的 user／session header。[会话遥测参考](../../../../packages/session/session-telemetry/README.zh.md)负责捕获与脱敏；本请求路径不改变 OTel 捕获或共享模式。

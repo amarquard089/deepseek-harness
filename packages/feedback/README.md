@@ -25,7 +25,7 @@ The feedback group collects human opinions about the harness's work: users can s
 | [`command-feedback`](command-feedback/README.md) | Session-level feedback: the `/feedback` command, the `sessionFeedback` Remote behind the Web dialog, and the fixed category taxonomy, all without a model turn |
 | [`message-feedback`](message-feedback/README.md) | Per-message ratings, categories, and notes, served to product surfaces through the `messageFeedback` service |
 
-Session remarks are a one-way signal: recording one is safe at any point in a conversation and never changes what the model sees. With a feedback-gated sharing policy, recording a session remark is what releases the session for sharing.
+Session remarks are a one-way signal: recording one is safe at any point in a conversation and never changes what the model sees.
 
 Per-message ratings and notes are stored with the session, survive restarts, and never appear in model history or telemetry.
 
@@ -33,7 +33,6 @@ Per-message ratings and notes are stored with the session, survive restarts, and
 ## Related documentation
 
 - [Feedback subsystem](../../docs/subsystems/feedback.md) — the message-feedback types, service contract, and Web consumer.
-- [Session telemetry subsystem](../../docs/subsystems/session-telemetry.md) — the sharing policy disclosed by the `/feedback` acknowledgement.
 - [Anonymous user identity](../identity/README.md) — the per-harness-home id embedded in the feedback acknowledgement.
 
 <a id="dev-note"></a>

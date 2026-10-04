@@ -1,12 +1,6 @@
 import { defineConfig } from 'tsdown'
 import { typertPlugin } from './packages/typert/generator/lib/types/tsdown-plugin.js'
 
-function isBuildFaceClient(value: unknown): boolean {
-  if (value === undefined || value === 'host') return false
-  if (value === 'client') return true
-  throw new Error(`tsdown: --env.DSH_BUILD_FACE must be host or client, received ${String(value)}`)
-}
-
 /**
  * The ordinary workspace build consumes JavaScript emitted by the Host
  * TypeScript project and runs Typert. The Client pass selects packages that
@@ -17,7 +11,7 @@ function isBuildFaceClient(value: unknown): boolean {
  * workspace members concurrently without ordering them.
  */
 export default defineConfig(({ env }) => {
-  const client = isBuildFaceClient(env?.DSH_BUILD_FACE)
+  const client = env?.DSH_BUILD_FACE === 'client'
   return {
     workspace: client
       ? ['vendor/*', 'packages/*/*', 'apps/cli']
