@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "浏览器操作（Playwright）",
-    "description": "让模型通过 Playwright MCP 在新启动的 Chromium 中浏览和操作网页。"
+    "title": "Playwright 浏览器",
+    "description": "通过 Playwright MCP 操作隔离的 Chromium 浏览器 Session"
   }
 }

@@ -149,6 +149,26 @@ describe('web command-line provider', () => {
     expect(observed.exits).toEqual([1])
   })
 
+  it('allows the all-interfaces host only with the explicit isolated-deployment opt-in', async () => {
+    const { values, observed } = await bootProvider([
+      '--host', '0.0.0.0',
+      '--allow-insecure-host',
+      '--trusted-host', 'dsh-web',
+    ])
+    expect(values).toEqual({
+      host: '0.0.0.0',
+      openBrowser: true,
+      trustedHosts: ['dsh-web'],
+    })
+    expect(observed.readerConfig).toEqual({
+      host: '0.0.0.0',
+      openBrowser: true,
+      port: 3080,
+      trustedHosts: ['dsh-web'],
+    })
+    expect(observed.exits).toEqual([])
+  })
+
   it('publishes --public-url as advertisement only, leaving the fence to --trusted-host', async () => {
     const { values, observed } = await bootProvider([
       '--public-url', 'https://web.example/ui',

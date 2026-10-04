@@ -1,6 +1,7 @@
 /**
  * The web app's command-line provider: it parses the `dsh --profile web` flag
- * family (`--host`, `--port`, `--public-url`, `--trusted-host`, `--no-open`)
+ * family (`--host`, `--port`, `--public-url`, `--trusted-host`, `--no-open`,
+ * `--allow-insecure-host`)
  * and its `--help` text, then provides the immutable values as
  * {@link WEB_STARTUP_SERVICE}. Ordinary rows inject that service before
  * reading it from lazy config.
@@ -45,6 +46,7 @@ interface WebOptions {
   port?: string
   publicUrl?: string
   trustedHost?: string[]
+  allowInsecureHost: boolean
 }
 
 /**
@@ -61,6 +63,7 @@ function webCommand(): Command {
     .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
     .option('--public-url <url>', 'advertise this HTTP(S) root in the printed, opened, web-surface, and DSH_WEB_URL forms; grants no trust')
     .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
+    .option('--allow-insecure-host', 'allow --host 0.0.0.0 for an explicitly isolated trusted deployment')
     .addHelpText('after', `
 Examples:
   dsh --profile web                          serve on the composed host and port
@@ -73,7 +76,8 @@ Examples:
 
 /**
  * Parse and provide the Web invocation as an ordinary Cordis service. The
- * command's action publishes the flags this invocation named; `--host 0.0.0.0`,
+ * command's action publishes the flags this invocation named; `--host 0.0.0.0`
+ * remains rejected unless `--allow-insecure-host` is explicit,
  * a non-numeric `--port`, or a malformed `--public-url` is a usage error, so on
  * rejection (and on `--help`) nothing is provided.
  * @param ctx - plugin context carrying the command line.
@@ -82,7 +86,7 @@ export function apply(ctx: Context): void {
   const program = webCommand()
   program.action(() => {
     const options = program.opts<WebOptions>()
-    if (options.host === '0.0.0.0') {
+    if (options.host === '0.0.0.0' && !options.allowInsecureHost) {
       program.error('error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
     }
     if (options.port !== undefined && !/^\d+$/.test(options.port)) {

@@ -103,8 +103,8 @@ export interface DeepSeekAdapterOptions<Connection extends DeepSeekConnectionOpt
   options: () => Connection
   /** Resolve authentication from this request's connection snapshot; never re-read the endpoint. */
   resolveAuth: (connection: Connection) => Promise<DeepSeekRequestAuth>
-  /** Resolve the harness-home anonymous id shared with telemetry and feedback. */
-  resolveUserId: () => AnonymousUserId
+  /** Optional legacy request correlation id; production hosts should omit it. */
+  resolveUserId?: () => AnonymousUserId
   /** Resolve the current durable attachment service; absence rejects image input. */
   resolveAttachments?: () => AttachmentStore | undefined
   /** Bridge one attachment reference into the current model-tool execution world. */
