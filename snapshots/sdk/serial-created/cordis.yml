@@ -24,14 +24,7 @@
   config:
     provider: spawn
     toolName: subagent
-    backgroundMode: one-shot
-    enableRunInBackground: false
     maxDepth: 1
-
-- id: session-log-deepseek
-  name: '@deepseek-ai/dsh-session-log-deepseek'
-  config:
-    enabled: true
 
 - insert:
     - id: serial-created-fixture

@@ -3,25 +3,25 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-21-deepseek-llm-api-request-extensions.md
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages:
-  en: bbb93b705960a21b
-  zh: 0fc6fc150215f08f
+  en: 86fd9d74f20c4a43
+  zh: 1887508e9fe57abd
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages/problem:
   en: 4945ce54f66df55c
   zh: 9fbd833c1d8122a7
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages/decision:
-  en: 2388519a1afaac92
-  zh: 6bf758f0560e29a5
+  en: a98b384426cd7b9f
+  zh: 774c8a97990dc0c1
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages/incremental-session-log-field:
-  en: 4e3138fbdd94259b
-  zh: 8fda801522045b88
+  en: f4e32b5bec0b52e6
+  zh: e60cbfe09b28bb4d
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages/plugin-package-field:
-  en: 0e51b8d8a1bd60fc
-  zh: dd18fd176c3f101f
+  en: d79bd4f8a2c821d4
+  zh: 0e2f48ee16ccc347
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages/deferred-inventory-caching:
   en: eb69576e756f4aa1
   zh: 5c1923159da3f7a2
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages/verification:
-  en: 9935338a0970d09d
+  en: ed730f117365f007
   zh: a9a36702bc72a9f7
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages/alternatives-considered:
   en: 5faf7699272f99b4
@@ -33,5 +33,5 @@
   en: b6eff63f49220dcc
   zh: 8e4a6c785ed2256a
 /agent-note-deepseek-llm-api-request-extensions-for-session-logs-and-plugin-packages/consequences:
-  en: 156df33a762d6498
-  zh: c84d319d92c5cc3a
+  en: 42df6eebc7a400da
+  zh: 9b0892a6013a4574

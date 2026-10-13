@@ -19,4 +19,12 @@ Credential failure happens before anonymous-user-id resolution, so an unauthoriz
 
 The [`DeepSeekLlmApiExtensionRegistry`](../packages/llm/deepseek-llm-api-extensions/README.md) remains available for explicitly composed provider metadata. A deployment must register each field through the registry; the base, Web, Desktop, SDK, and ACP profiles register no Session-log or package-inventory fields.
 
-The adapter prepares registered fields from the exact serialized base body before HTTP dispatch. Preparation or field-collision failure prevents the request. After HTTP 2xx, captured acceptance callbacks run before the SSE body is consumed. A composition without the registry sends the unextended base body.
+Prepared JSON values are detached from provider-owned state, merged as top-level siblings of the base fields, and serialized in the same HTTP body. A contributor whose preparation fails is omitted from that request, with only its first failure logged, while the other fields are still sent; a field that collides with a base field prevents the request. If the merged body fails to serialize, the adapter sends the base body without any extension field, skips the acceptance transaction so contributors resend their state on a later request, and logs the omitted field names. A composition without the registry sends the unextended base body.
+
+After the configured endpoint returns HTTP 2xx, the adapter runs the prepared `accept()` transaction before reading the SSE response body. Transport failures and non-2xx responses do not accept any contribution. An acceptance failure is logged and does not fail the model request; the contributor resends its unaccepted state on a later request. Acceptance records endpoint-level HTTP success; it does not assert that an SSE stream completed or that the endpoint persisted an extension.
+
+## Exposure and receiver requirements
+
+The request headers expose the Harness application version, one anonymous Harness-home identity, and an optional Session identity. A gateway selected through `baseURL` receives the same values as the official endpoint; with no registered contribution, no body extension field is sent.
+
+Receivers address extension fields by name, dispatch each field by its own `version`, and ignore JSON member ordering. The base request remains usable without either the registry or a particular contribution; field absence means that contribution did not apply to that request.

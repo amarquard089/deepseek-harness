@@ -31,6 +31,3 @@
 
 - id: timeout-policy
   name: '@deepseek-ai/dsh-tool-call-timeout-policy'
-
-- id: plugin-package-inventory-deepseek
-  disabled: true

@@ -17,7 +17,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
-import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ISessions, SessionForkError } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
   IWorkspaces, SessionActivity, WorkspaceArchiveError, WorkspaceSnapshot,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -208,8 +208,11 @@ export function apply(ctx: Context): void {
   })
   const forkInjected = (): ForkSessionInjected => ({
     forkSession: (sessionId) => {
-      uiWorkspace.forkSession(sessionId).catch(() => {
-        // Fork or child-title failure leaves the list as it was.
+      uiWorkspace.forkSession(sessionId, undefined, { allowMigration: false }).catch((error: unknown) => {
+        if (error instanceof Error && error.name === 'SessionForkError'
+          && (error as SessionForkError).rpcError.code === 'session/migration-required') {
+          notify({ kind: 'forkRequiresOpen', sessionId })
+        }
       })
     },
   })
@@ -224,11 +227,18 @@ export function apply(ctx: Context): void {
     dismissToast: () => { rowToast.set(null) },
     undoArchive: unarchiveSession,
     showArchived: () => { viewInstance.actions.setArchivedFilter('show') },
+    openForkSource: (sessionId) => {
+      if (workspaces.list.getSnapshot().archivedSessionIds.includes(sessionId)) {
+        notify({ kind: 'archivedNotOpenable' })
+        return
+      }
+      openSession(sessionId)
+    },
   })
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
-    startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },
+    startSession: (workspaceId, options) => { uiWorkspace.startSession(workspaceId, options) },
     open: openSession,
     searchSessions,
     searchResultLimit: sessions.searchResultLimit,
