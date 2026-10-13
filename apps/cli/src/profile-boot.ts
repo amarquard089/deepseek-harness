@@ -1,7 +1,7 @@
 /**
  * Shared profile boot for every `dsh` surface: resolve the profile, stack its
  * patch layers (bundle layers in `dsh.profile.bundles` order, the profile's
- * own `cordis.patch.yml`, `--patch` overlays, the telemetry switch), mount the
+ * own `cordis.patch.yml`, `--patch` overlays), mount the
  * tree over the profile's empty root config, and wire fail-loud plus bounded shutdown.
  *
  * App flags are not the launcher's business: the invocation's inner arguments
@@ -186,8 +186,7 @@ interface ComposedProfile {
  * `dsh.profile.bundles` order (a base-backed profile gets the base bundle's
  * platform-gated shell rows), the profile's user layer, the home-level user
  * layer (`$DSH_HOME/cordis.patch.yml` — machine-local preferences that apply
- * to every profile, so it outranks the per-profile layer), `--patch` overlays,
- * then the telemetry switch.
+ * to every profile, so it outranks the per-profile layer), then `--patch` overlays.
  * @param name - the profile name.
  * @param patchFiles - `--patch` overlay paths, in argv order.
  * @param fromDefaultProfile - shipped template for a missing named profile.

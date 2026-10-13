@@ -1,6 +1,6 @@
 ---
 description: "Operate Chromium through Playwright MCP with separate browser state for each live Session."
-kind: "package-reference"
+kind: "package-bundle"
 ---
 
 # @deepseek-ai/dsh-experimental-browser-use-playwright-mcp

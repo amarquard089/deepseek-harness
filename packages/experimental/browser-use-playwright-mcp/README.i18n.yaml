@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/experimental/browser-use-playwright-mcp/README.md
 /:
-  en: 65c3ef2e9fa0bb0e
-  zh: 530a4b4ca63094e8
+  en: 256aa58030cd68d9
+  zh: d5dd4079a48ad749
 /deepseek-ai-dsh-experimental-browser-use-playwright-mcp:
   en: 9e5a4fa85c51434d
   zh: 21a6143dff340791

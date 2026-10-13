@@ -203,7 +203,7 @@ describe('Chat inject API', () => {
     void injected.loadThrough(SessionSeq(42))
     expect(b.session.loadThrough).toHaveBeenCalledWith(42)
 
-    const forkCreated = vi.spyOn(b.runtime.sessions, 'fork').mockImplementation(async (input) => { input.onCreated?.(ROOT); return ROOT })
+    const forkCreated = vi.spyOn(b.runtime.sessions, 'fork').mockImplementation(async () => ROOT)
     injected.forkAt(17)
     await b.runtime.sessions.replaceEvents(ROOT, [
       { type: 'event', event: { type: 'turn/start', seq: SessionSeq(10), time: 10, data: { turn: 1 } } },
@@ -220,14 +220,14 @@ describe('Chat inject API', () => {
       expect(b.openSession).toHaveBeenCalledWith(ROOT)
     })
     expect(b.runtime.sessions.calls).toContainEqual({
-      method: 'fork', args: [{ sessionId: ROOT, atSeq: 17, increaseTitle: true, onCreated: expect.any(Function) as (childId: SessionId) => void }],
+      method: 'fork', args: [{ sessionId: ROOT, atSeq: 17, increaseTitle: true }],
     })
 
     const fork = vi.spyOn(b.runtime.sessions, 'fork').mockRejectedValueOnce(new Error('fork failed'))
     injected.forkAt(18)
     await vi.waitFor(() => {
       expect(fork).toHaveBeenCalledWith({
-        sessionId: ROOT, atSeq: 18, increaseTitle: true, onCreated: expect.any(Function) as (childId: SessionId) => void,
+        sessionId: ROOT, atSeq: 18, increaseTitle: true,
       })
     })
     await b.runtime.dispose()

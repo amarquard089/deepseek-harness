@@ -1,6 +1,6 @@
 ---
 description: "通过 Playwright MCP 操作 Chromium，为每个活动 Session 保持独立浏览器状态。"
-kind: "package-reference"
+kind: "package-bundle"
 ---
 
 # @deepseek-ai/dsh-experimental-browser-use-playwright-mcp
