@@ -25,7 +25,10 @@ export function toPosixRelative(absolute, root) {
  * @param {object} options Traversal options.
  * @param {readonly string[]} options.excludeDirectories Directory names or
  *   root-relative directory paths to skip, such as `.git` or `fork/reports`.
- * @returns {string[]} Repository-relative POSIX paths, sorted.
+ * @returns {{files: string[], unreadable: string[], symlinks: string[]}}
+ *   Repository-relative POSIX paths the walk read, could not read, or refused
+ *   to follow. Unreadable and symlinked paths are returned rather than dropped:
+ *   a gate that cannot look somewhere must say so instead of reporting a pass.
  */
 export function walkFiles(root, options) {
   const excludedNames = new Set()
@@ -35,18 +38,22 @@ export function walkFiles(root, options) {
     else excludedNames.add(entry)
   }
   const files = []
+  const unreadable = []
+  const symlinks = []
   const visit = (absoluteDirectory) => {
     let entries
     try {
       entries = readdirSync(absoluteDirectory, { withFileTypes: true })
     } catch {
-      // An unreadable directory cannot hide a stripped surface from the other
-      // checks; report nothing here and let the caller's coverage notes stand.
+      unreadable.push(toPosixRelative(absoluteDirectory, root))
       return
     }
     entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
     for (const entry of entries) {
-      if (entry.isSymbolicLink()) continue
+      if (entry.isSymbolicLink()) {
+        symlinks.push(toPosixRelative(join(absoluteDirectory, entry.name), root))
+        continue
+      }
       const absolute = join(absoluteDirectory, entry.name)
       if (entry.isDirectory()) {
         if (excludedNames.has(entry.name)) continue
@@ -58,7 +65,7 @@ export function walkFiles(root, options) {
     }
   }
   visit(root)
-  return files
+  return { files, unreadable, symlinks }
 }
 
 /**

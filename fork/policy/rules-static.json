@@ -630,9 +630,9 @@
       "id": "base-bundle-absence-assertions",
       "ruleId": "static.stripped-identifier",
       "path": "packages/bundle/base/tests/base.spec.ts",
-      "pattern": "(plugin-package-inventory-deepseek|session-telemetry-otel)",
-      "count": 2,
-      "reason": "These assertions require the shipped base bundle to compose no stripped plugin row; they name the plugins in order to prove their absence.",
+      "pattern": "(session-log-deepseek|plugin-package-inventory-deepseek|session-telemetry-otel)",
+      "count": 3,
+      "reason": "These three assertions require the shipped base bundle to compose no stripped plugin row; they name each plugin in order to prove its absence. Suppression is span-scoped, so a fourth stripped identifier added to this file stays a blocker.",
       "evidence": "packages/bundle/base/tests/base.spec.ts"
     },
     {

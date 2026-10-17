@@ -214,6 +214,22 @@ export function addedPaths(root, from, to) {
 }
 
 /**
+ * List the paths one revision adds relative to another, keeping the failure apart
+ * from the empty result so a caller never reports a pass it did not prove.
+ * @param {string} root Repository root.
+ * @param {string} from Excluded revision.
+ * @param {string} to Included revision.
+ * @returns {{ok: boolean, paths: string[], detail: string}} Listed paths or the reason listing failed.
+ */
+export function addedPathsChecked(root, from, to) {
+  const result = git(root, ['diff', '--name-only', '--diff-filter=A', '--no-renames', from, to])
+  if (result.exitCode !== 0) {
+    return { ok: false, paths: [], detail: `${result.command} exited ${result.exitCode}: ${result.stderr.trim()}` }
+  }
+  return { ok: true, paths: result.stdout.split('\n').filter(line => line !== ''), detail: result.command }
+}
+
+/**
  * List the unmerged index entries of a conflicted merge.
  * @param {string} root Repository root.
  * @returns {Array<{path: string, stages: number[]}>} Conflicted paths with the stages that exist.

@@ -220,17 +220,31 @@ async function collectContentFindings({ root, report, core, rules, files }, stri
     outcome.lossy = read.hasNul === true
     outcome.deadFlag = text.includes(DEAD_TELEMETRY_FLAG)
     if (wanted.has(RULE_IDS.strippedNameReference)) {
+      // One occurrence is one finding: when two stripped names nest (a shorter
+      // name is a prefix of a longer one), keep only the longest match so the
+      // report, the counts, and any residual span stay aligned.
+      const hits = []
       for (const { name, matcher } of nameMatchers) {
-        for (const match of collectMatches(text, matcher)) {
-          found.push({
-            ruleId: RULE_IDS.strippedNameReference,
-            severity: 'blocker',
-            path,
-            line: lineNumberAt(text, match.offset),
-            detail: `references stripped package ${name}`,
-            remedy: `Remove the reference to ${name}; the package no longer exists in this fork.`,
-          })
-        }
+        for (const match of collectMatches(text, matcher)) hits.push({ name, match })
+      }
+      hits.sort((left, right) => left.match.offset - right.match.offset || right.match.text.length - left.match.text.length)
+      const kept = []
+      for (const hit of hits) {
+        const covered = kept.some(previous => hit.match.offset >= previous.match.offset
+          && hit.match.offset + hit.match.text.length <= previous.match.offset + previous.match.text.length)
+        if (!covered) kept.push(hit)
+      }
+      for (const { name, match } of kept) {
+        found.push({
+          ruleId: RULE_IDS.strippedNameReference,
+          severity: 'blocker',
+          path,
+          line: lineNumberAt(text, match.offset),
+          offset: match.offset,
+          match: match.text,
+          detail: `references stripped package ${name}`,
+          remedy: `Remove the reference to ${name}; the package no longer exists in this fork.`,
+        })
       }
     }
     if (wanted.has(RULE_IDS.strippedIdentifier)) {
@@ -242,6 +256,8 @@ async function collectContentFindings({ root, report, core, rules, files }, stri
             severity: 'blocker',
             path,
             line: lineNumberAt(text, match.offset),
+            offset: match.offset,
+            match: match.text,
             detail: `names the removed ${identifier.kind} "${identifier.token}" (${identifier.reason})`,
             remedy: 'Remove the reference, or add a justifiedResiduals entry stating why it cannot carry telemetry.',
           })
@@ -251,15 +267,24 @@ async function collectContentFindings({ root, report, core, rules, files }, stri
     if (wanted.has(RULE_IDS.strippedFileReference)) {
       for (const strippedFile of strippedFiles) {
         if (!text.includes(strippedFile.baseName)) continue
-        const lines = new Set()
-        for (const hit of collectMatches(text, strippedFile.fullPath)) lines.add(lineNumberAt(text, hit.offset))
-        for (const hit of collectMatches(text, strippedFile.baseNameMatcher)) lines.add(lineNumberAt(text, hit.offset))
-        for (const line of [...lines].sort((left, right) => left - right)) {
+        const firstPerLine = new Map()
+        for (const hit of collectMatches(text, strippedFile.fullPath)) {
+          const line = lineNumberAt(text, hit.offset)
+          if (!firstPerLine.has(line)) firstPerLine.set(line, hit)
+        }
+        for (const hit of collectMatches(text, strippedFile.baseNameMatcher)) {
+          const line = lineNumberAt(text, hit.offset)
+          if (!firstPerLine.has(line)) firstPerLine.set(line, hit)
+        }
+        for (const line of [...firstPerLine.keys()].sort((left, right) => left - right)) {
+          const hit = firstPerLine.get(line)
           found.push({
             ruleId: RULE_IDS.strippedFileReference,
             severity: 'blocker',
             path,
             line,
+            offset: hit.offset,
+            match: hit.text,
             detail: `references ${strippedFile.path}, a file the fork strip deleted`,
             remedy: `Delete the ${strippedFile.path} reference; the fork strip removes that file and every remnant of the surface it belonged to.`,
           })
@@ -275,6 +300,8 @@ async function collectContentFindings({ root, report, core, rules, files }, stri
           severity,
           path,
           line: lineNumberAt(text, match.offset),
+          offset: match.offset,
+          match: match.text,
           detail: `matched /${rule.matcher.source}/ on ${JSON.stringify(match.text)} in ${severity === rule.severity ? 'code' : 'a document or manifest'} (${rule.reason})`,
           remedy: rule.remedy,
         })
@@ -408,46 +435,133 @@ function checkTransitiveTelemetry({ root, report, rules }) {
   return notes
 }
 
+/** Indentation of a YAML sequence-item line, or undefined when it starts no item. */
+function sequenceItemIndent(line) {
+  const match = /^([ ]*)-(\s|$)/.exec(line)
+  return match === null ? undefined : match[1].length
+}
+
+/** Leading-space count of one line. */
+function indentOf(line) {
+  return /^ */.exec(line)[0].length
+}
+
+/**
+ * Drop a YAML comment, ignoring `#` inside quotes.
+ * @param {string} line One line without its newline.
+ * @returns {string} The line up to its comment.
+ */
+function stripYamlComment(line) {
+  let quote
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (quote !== undefined) {
+      if (char === quote) quote = undefined
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char
+      continue
+    }
+    if (char === '#' && (index === 0 || /\s/.test(line[index - 1]))) return line.slice(0, index)
+  }
+  return line
+}
+
 /**
  * Decide whether a composition reference sits in a row that can only turn the
- * plugin off. A row that sets `disabled: true` or `enabled: false` and names no
- * module cannot install or enable anything, so it is residue rather than risk.
+ * plugin off.
+ *
+ * The row is the YAML sequence item the reference belongs to: the nearest
+ * preceding item start, ended by the next item at the same or a shallower
+ * indentation, so a nested item is its own row and never inherits its parent's
+ * keys. A row counts as inert only when that same row carries a top-level
+ * `disabled: true` (or `config: enabled: false`) **and** declares no `name:` or
+ * `module:` anywhere. Every ambiguous shape defaults to composing, because a
+ * wrongly inert row is a pass while telemetry is present.
  * @param {string} text Full composition file text.
  * @param {number} offset Offset of the reference inside the text.
- * @returns {{inert: boolean, row: string}} Whether the row is inert, and its text.
+ * @returns {{inert: boolean, module: string | undefined, marker: string | undefined, row: string}}
+ *   Whether the row is inert, the module it declares, the marker that disabled
+ *   it, and the row text.
  */
 function compositionRowState(text, offset) {
-  const rowStart = Math.max(0, text.lastIndexOf('\n- ', offset) + 1)
-  const nextRow = text.indexOf('\n- ', offset)
-  const row = text.slice(rowStart, nextRow === -1 ? text.length : nextRow + 1)
-  const disabled = /(^|\n)\s*disabled:\s*true\b/.test(row)
-  const disabledByConfig = /(^|\n)\s*enabled:\s*false\b/.test(row)
-  return { inert: disabled || disabledByConfig, row }
+  const lines = text.split('\n')
+  const matchLine = lineNumberAt(text, offset) - 1
+  let start = -1
+  for (let index = matchLine; index >= 0; index -= 1) {
+    if (sequenceItemIndent(lines[index]) !== undefined) {
+      start = index
+      break
+    }
+  }
+  if (start === -1) return { inert: false, module: undefined, marker: undefined, row: '' }
+  const itemIndent = sequenceItemIndent(lines[start])
+  let end = lines.length
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const nextIndent = sequenceItemIndent(lines[index])
+    if (nextIndent !== undefined && nextIndent <= itemIndent) {
+      end = index
+      break
+    }
+  }
+  const row = lines.slice(start, end).map(stripYamlComment)
+  const inline = /^([ ]*)-(\s+)(\S.*)$/.exec(lines[start])
+  const keyIndent = inline === null
+    ? row.slice(1).find(line => line.trim() !== '') === undefined
+      ? undefined
+      : indentOf(row.slice(1).find(line => line.trim() !== ''))
+    : inline[1].length + 1 + inline[2].length
+  const topLevel = line => keyIndent !== undefined && indentOf(line) === keyIndent
+  const moduleMatch = row.map(line => /^\s*(?:name|module)\s*:\s*(\S.*)$/.exec(line)).find(match => match !== null)
+  const module = moduleMatch === undefined
+    ? undefined
+    : moduleMatch[1].trim().replace(/^['"]|['"]$/g, '')
+  const disabledHere = keyIndent !== undefined && row.some(line =>
+    topLevel(line) && /^disabled\s*:\s*true\b/.test(line.trim()))
+  const hasConfig = keyIndent !== undefined && row.some(line => topLevel(line) && /^config\s*:/.test(line.trim()))
+  const disabledByConfig = hasConfig
+    && row.some(line => indentOf(line) > keyIndent && /^enabled\s*:\s*false\b/.test(line.trim()))
+  const marker = disabledHere ? 'disabled: true' : disabledByConfig ? 'config.enabled: false' : undefined
+  return {
+    inert: module === undefined && marker !== undefined,
+    module,
+    marker,
+    row: row.join('\n'),
+  }
 }
 
 /**
  * Composition: no profile, bundle, snapshot fixture, or generated catalog may
- * compose a stripped plugin. A row that only disables a removed plugin is
- * reported as a warning, because the plugin is not installed to disable.
+ * compose a stripped plugin. A row that only disables a removed plugin and
+ * declares no module is reported as a warning, because nothing can install it;
+ * every other shape blocks, and a composition file this scan cannot read blocks
+ * too, since the composition proof would otherwise be incomplete.
  * @param {object} context Check context.
  * @returns {{candidates: object[], notes: string[]}} Findings and coverage notes.
  */
 function checkComposition({ root, report, core, rules, files }) {
   const candidates = []
+  const unread = []
   const compositions = files.filter(path => matchesAny(path, rules.compositionMatchers))
+  let read = 0
   for (const path of compositions) {
-    const read = readTextFile(root, path, rules.scan.maxTextFileBytes)
-    if (read.text === undefined) continue
+    const source = readTextFile(root, path, rules.scan.maxTextFileBytes)
+    if (source.text === undefined) {
+      unread.push(`${path} (${source.skipped})`)
+      continue
+    }
+    read += 1
     report.checked += 1
     for (const name of core.strippedPackageNames) {
-      for (const match of collectMatches(read.text, new RegExp(escapeRegExp(name), 'g'))) {
-        candidates.push(compositionCandidate(read.text, path, match.offset, `composition names stripped package ${name}`, name))
+      for (const match of collectMatches(source.text, new RegExp(escapeRegExp(name), 'g'))) {
+        candidates.push(compositionCandidate(source.text, path, match.offset, `composition names stripped package ${name}`, name))
       }
     }
     for (const identifier of rules.strippedIdentifiers) {
-      for (const match of collectMatches(read.text, identifier.matcher)) {
+      for (const match of collectMatches(source.text, identifier.matcher)) {
         candidates.push(compositionCandidate(
-          read.text,
+          source.text,
           path,
           match.offset,
           `composition names the removed plugin or service "${identifier.token}"`,
@@ -456,14 +570,37 @@ function checkComposition({ root, report, core, rules, files }) {
       }
     }
   }
+  for (const path of unread) {
+    addViolation(report, {
+      ruleId: RULE_IDS.compositionUnread,
+      severity: 'blocker',
+      path: path.slice(0, path.lastIndexOf(' (')),
+      detail: `composition file could not be read (${path.slice(path.lastIndexOf(' (') + 2, -1)}), so it was not checked for stripped plugins`,
+      remedy: 'Make the file readable or exclude it from the composition globs; an unchecked composition cannot be called clean.',
+    })
+  }
   return {
     candidates,
-    notes: [`composition scan covered ${compositions.length} file(s)`],
+    notes: [`composition scan read ${read} of ${compositions.length} file(s)${unread.length === 0 ? '' : `; ${unread.length} unreadable or oversized and reported as a violation: ${pathList(unread)}`}`],
   }
 }
 
 /**
- * Build one composition finding with the severity its row justifies.
+ * Whether one offset sits inside a YAML comment on its line.
+ * @param {string} text Full file text.
+ * @param {number} offset Offset to classify.
+ * @returns {boolean} True when the rest of that line is a comment.
+ */
+function isInYamlComment(text, offset) {
+  const lineStart = text.lastIndexOf('\n', offset - 1) + 1
+  const lineEnd = text.indexOf('\n', offset)
+  const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd)
+  const code = stripYamlComment(line)
+  return code.length < line.length && offset >= lineStart + code.length
+}
+
+/**
+ * Build one composition finding with the severity its own row justifies.
  * @param {string} text Full composition file text.
  * @param {string} path Repository-relative path.
  * @param {number} offset Offset of the reference.
@@ -472,15 +609,35 @@ function checkComposition({ root, report, core, rules, files }) {
  * @returns {object} Candidate finding.
  */
 function compositionCandidate(text, path, offset, detail, token) {
-  const { inert } = compositionRowState(text, offset)
+  const line = lineNumberAt(text, offset)
+  const matched = text.slice(offset).split('\n')[0].trim()
+  if (isInYamlComment(text, offset)) {
+    // A comment cannot compose anything, but a stripped reference in one is
+    // still strip residue, so it stays visible instead of passing silently.
+    return {
+      ruleId: RULE_IDS.compositionStrippedPlugin,
+      severity: 'warning',
+      path,
+      line,
+      offset,
+      match: matched,
+      detail: `${detail}, but only inside a comment, so no row composes it`,
+      remedy: `Delete the stale "${token}" reference, or record it as a justifiedResiduals entry if the comment must stay.`,
+    }
+  }
+  const { inert, module, marker } = compositionRowState(text, offset)
   return {
     ruleId: RULE_IDS.compositionStrippedPlugin,
     severity: inert ? 'warning' : 'blocker',
     path,
-    line: lineNumberAt(text, offset),
+    line,
+    offset,
+    match: matched,
     detail: inert
-      ? `${detail}, but the row only disables it (no module name), so nothing can be composed`
-      : detail,
+      ? `${detail}, but its row only disables it (${marker}) and declares no module name, so nothing can be composed`
+      : module === undefined
+        ? `${detail} in a row that composes it`
+        : `${detail} as module "${module}"`,
     remedy: inert
       ? `Delete the dead "${token}" row; keeping it re-introduces the reference on every upstream sync.`
       : `Delete the row that composes "${token}"; the plugin no longer exists in this fork.`,
@@ -497,13 +654,15 @@ async function checkArtifacts({ root, report, rules }) {
   const candidates = []
   const artifactExcludes = rules.scan.artifactExcludeDirectories
     ?? rules.scan.excludeDirectories.filter(entry => !BUILD_OUTPUT_NAMES.has(entry))
-  const artifactFiles = walkFiles(root, { excludeDirectories: artifactExcludes }).filter(path =>
+  const walk = walkFiles(root, { excludeDirectories: artifactExcludes })
+  const artifactFiles = walk.files.filter(path =>
     matchesAny(path, rules.artifactRootMatchers)
     && rules.scan.artifactExtensions.has(extensionOf(path))
     && !isScopedOut(rules.scopes, RULE_IDS.artifactMarker, path))
   if (artifactFiles.length === 0) {
     return {
       candidates,
+      tree: walk,
       notes: ['artifact scan skipped: no built output matched the artifact roots in fork/policy/rules-static.json; run the artifact build before relying on the artifact half of this gate'],
     }
   }
@@ -537,6 +696,7 @@ async function checkArtifacts({ root, report, rules }) {
   report.checked += scanned
   return {
     candidates,
+    tree: walk,
     notes: [`artifact scan covered ${scanned} file(s) of ${artifactFiles.length} built output file(s)${skipped.length === 0 ? '' : `; ${skipped.length} skipped: ${pathList(skipped)}`}`],
   }
 }
@@ -549,50 +709,78 @@ async function checkArtifacts({ root, report, rules }) {
  * @returns {void}
  */
 function applyResiduals({ root, report, rules }, candidates) {
-  const residuals = new Map(rules.justifiedResiduals.map(entry => [suppressionKey(entry.ruleId, entry.path), entry]))
-  const suppressed = new Map()
+  // Each residual is validated against the file first, so suppression can be
+  // keyed on the exact spans it covers rather than on the whole file.
+  const states = rules.justifiedResiduals.map((entry) => {
+    const read = readTextFile(root, entry.path, rules.scan.maxTextFileBytes)
+    if (read.text === undefined) return { entry, problem: 'targets a file that is absent or unreadable' }
+    const spans = collectMatches(read.text, entry.matcher).map(match => ({
+      start: match.offset,
+      end: match.offset + match.text.length,
+      line: lineNumberAt(read.text, match.offset),
+    }))
+    if (spans.length !== entry.count) {
+      return {
+        entry,
+        spans,
+        problem: `expects ${entry.count} match(es) of /${entry.matcher.source}/ but the file has ${spans.length}`,
+      }
+    }
+    return { entry, spans, suppressed: 0 }
+  })
+  const byLocation = new Map()
+  for (const state of states) {
+    if (state.spans === undefined) continue
+    const key = suppressionKey(state.entry.ruleId, state.entry.path)
+    byLocation.set(key, [...byLocation.get(key) ?? [], state])
+  }
   for (const candidate of candidates) {
-    const residual = residuals.get(suppressionKey(candidate.ruleId, candidate.path))
-    if (residual === undefined) {
+    const covering = (byLocation.get(suppressionKey(candidate.ruleId, candidate.path)) ?? [])
+      .find(state => state.spans.some(span => spanCovers(span, candidate)))
+    if (covering === undefined) {
       addViolation(report, candidate)
       continue
     }
-    suppressed.set(residual.id, (suppressed.get(residual.id) ?? 0) + 1)
+    covering.suppressed += 1
   }
-  for (const residual of rules.justifiedResiduals) {
+  for (const state of states) {
     report.checked += 1
-    const read = readTextFile(root, residual.path, rules.scan.maxTextFileBytes)
-    if (read.text === undefined) {
+    if (state.problem !== undefined) {
       addViolation(report, {
         ruleId: RULE_IDS.staleResidual,
         severity: 'error',
-        path: residual.path,
-        detail: `justifiedResiduals ${residual.id} targets a file that is absent or unreadable`,
-        remedy: 'Delete the stale entry, or correct its path.',
+        path: state.entry.path,
+        detail: `justifiedResiduals ${state.entry.id} ${state.problem}`,
+        remedy: 'Review the new occurrence, then update or delete the entry; a residual that no longer matches its location may hide a re-introduction.',
       })
       continue
     }
-    const actual = collectMatches(read.text, residual.matcher).length
-    if (actual !== residual.count) {
+    if (state.suppressed !== state.entry.count) {
       addViolation(report, {
         ruleId: RULE_IDS.staleResidual,
         severity: 'error',
-        path: residual.path,
-        detail: `justifiedResiduals ${residual.id} expects ${residual.count} match(es) of /${residual.matcher.source}/ but the file has ${actual}`,
-        remedy: 'Review the new occurrence, then update the entry count; a count that moved may hide a re-introduction.',
-      })
-      continue
-    }
-    if (!suppressed.has(residual.id)) {
-      addViolation(report, {
-        ruleId: RULE_IDS.staleResidual,
-        severity: 'error',
-        path: residual.path,
-        detail: `justifiedResiduals ${residual.id} matches content that no rule reported, so it suppresses nothing`,
-        remedy: 'Delete the entry, or point it at the rule and path that still reports the finding.',
+        path: state.entry.path,
+        detail: `justifiedResiduals ${state.entry.id} matched ${state.entry.count} location(s) but accounted for ${state.suppressed} finding(s)`,
+        remedy: 'Point the entry at the rule and location it still suppresses, or delete it.',
       })
     }
   }
+}
+
+/**
+ * Whether a residual span covers one finding. Findings carry the offset and text
+ * of the match that produced them, so an exact span decides: a residual granted
+ * for one occurrence can never hide a different one in the same file.
+ * @param {{start: number, end: number, line: number}} span Residual match span.
+ * @param {object} candidate Finding under evaluation.
+ * @returns {boolean} True when the span produced this finding.
+ */
+function spanCovers(span, candidate) {
+  if (typeof candidate.offset === 'number') {
+    const end = candidate.offset + (candidate.match?.length ?? 0)
+    return candidate.offset < span.end && span.start < Math.max(end, candidate.offset + 1)
+  }
+  return candidate.line !== undefined && candidate.line === span.line
 }
 
 /**
@@ -629,7 +817,8 @@ function checkScopes({ report, rules }, files) {
  * @returns {object} The same report with violations, notes, and checked count.
  */
 export async function runStaticChecks({ root, report, core, rules }) {
-  const files = walkFiles(root, { excludeDirectories: rules.scan.excludeDirectories })
+  const tree = walkFiles(root, { excludeDirectories: rules.scan.excludeDirectories })
+  const { files } = tree
   report.checked += files.length
   const context = { root, report, core, rules, files }
   checkStrippedPaths(context)
@@ -647,5 +836,35 @@ export async function runStaticChecks({ root, report, core, rules }) {
   report.notes.push(...checkTransitiveTelemetry(context))
   applyResiduals(context, [...content.candidates, ...composition.candidates, ...artifacts.candidates])
   checkScopes(context, files)
+  reportUnreadablePaths(context, [tree, artifacts.tree])
   return report
+}
+
+/**
+ * Report every path the scans could not read, and note the paths they refused
+ * to follow. A gate that could not look somewhere must not be indistinguishable
+ * from one that looked and found nothing.
+ * @param {object} context Check context.
+ * @param {readonly object[]} walks Walks performed, each with unreadable and symlink lists.
+ * @returns {void}
+ */
+function reportUnreadablePaths({ report }, walks) {
+  const unreadable = new Set()
+  const symlinks = new Set()
+  for (const walk of walks) {
+    for (const path of walk?.unreadable ?? []) unreadable.add(path)
+    for (const path of walk?.symlinks ?? []) symlinks.add(path)
+  }
+  for (const path of [...unreadable].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))) {
+    addViolation(report, {
+      ruleId: RULE_IDS.unreadablePath,
+      severity: 'blocker',
+      path,
+      detail: 'directory could not be read, so nothing under it was scanned',
+      remedy: 'Fix the permissions or remove the directory; an unreadable subtree means this gate proved nothing about it.',
+    })
+  }
+  if (symlinks.size > 0) {
+    report.notes.push(`${symlinks.size} symlink(s) not followed: ${pathList([...symlinks].sort())}`)
+  }
 }

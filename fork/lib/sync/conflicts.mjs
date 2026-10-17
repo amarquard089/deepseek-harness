@@ -290,14 +290,32 @@ function dumpEvidence({ root, date, reportsDirectory, unresolved, syncBranch, up
  * Assert that every path the fork added is still present after the sync.
  * @param {object} input Assertion inputs.
  * @param {string} input.root Repository root.
- * @param {(root: string, from: string, to: string) => string[]} input.listAdded Added-path lister.
+ * @param {(root: string, from: string, to: string) => {ok: boolean, paths: string[], detail: string}} input.listAdded Checked added-path lister.
  * @param {string|null} input.base Merge base revision.
  * @param {string} input.protectedBranch Protected branch name.
- * @returns {{checked: number, missing: string[], ok: boolean}} Assertion result.
+ * @returns {{checked: number, missing: string[], ok: boolean, reason: string|null}} Assertion result.
  */
 export function forkLocalPreserved({ root, listAdded, base, protectedBranch }) {
-  if (base === null) return { checked: 0, missing: [], ok: true }
-  const added = listAdded(root, base, protectedBranch)
-  const missing = added.filter(path => !existsSync(join(root, path)))
-  return { checked: added.length, missing, ok: missing.length === 0 }
+  if (base === null) {
+    return {
+      checked: 0,
+      missing: [],
+      ok: false,
+      reason: 'no merge base, so the fork-added set cannot be computed and the invariant cannot be proven',
+    }
+  }
+  const listed = listAdded(root, base, protectedBranch)
+  if (!listed.ok) {
+    return { checked: 0, missing: [], ok: false, reason: `could not list fork-added paths: ${listed.detail}` }
+  }
+  if (listed.paths.length === 0) {
+    return {
+      checked: 0,
+      missing: [],
+      ok: false,
+      reason: `the fork-added set between ${base.slice(0, 9)} and ${protectedBranch} is empty, so the invariant cannot be proven`,
+    }
+  }
+  const missing = listed.paths.filter(path => !existsSync(join(root, path)))
+  return { checked: listed.paths.length, missing, ok: missing.length === 0, reason: null }
 }

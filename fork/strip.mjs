@@ -86,10 +86,17 @@ function main() {
   } else {
     printStripOutcome(outcome)
   }
-  if (outcome.unhandled.length > 0 || outcome.newResiduals.length > 0) {
+  if (outcome.unhandled.length > 0) {
     console.error(
-      `[strip] FAIL: ${outcome.unhandled.length} reference(s) the strip could not remove, ` +
-        `${outcome.newResiduals.length} new reference(s) outside its surfaces`,
+      `[strip] FAIL: ${outcome.unhandled.length} reference(s) on the strip's own surfaces could not be removed`,
+    )
+    return EXIT.fail
+  }
+  if (outcome.newResiduals.length > 0) {
+    console.error(
+      `[strip] surfaces clean; ${outcome.newResiduals.length} residual reference(s) outside the strip's surfaces ` +
+        '(released Session fixtures, prose) are left in place for the static gate to adjudicate — reported here so a ' +
+        'reviewer sees them, not blocking in fork/sync-upstream.mjs',
     )
     return EXIT.fail
   }
