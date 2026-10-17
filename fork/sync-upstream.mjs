@@ -19,7 +19,7 @@ import { join, resolve as resolvePath } from 'node:path'
 
 import { EXIT, loadPolicy, parseArgv } from './lib/policy.mjs'
 import {
-  addedPaths,
+  addedPathsChecked,
   branchExists,
   commitsBetween,
   conflictedPaths,
@@ -34,7 +34,7 @@ import {
   untrackedEntries,
 } from './lib/sync/git.mjs'
 import { forkLocalPreserved, resolveConflicts } from './lib/sync/conflicts.mjs'
-import { gateDecision, resolveGateScripts, runGates } from './lib/sync/gates.mjs'
+import { gateDecision, resolveGateScripts, runGates, validateRequiredGates } from './lib/sync/gates.mjs'
 import { addCheck, capture, newSyncReport, reproduceCommands, writeSyncReport } from './lib/sync/report.mjs'
 import { applyStrip, deriveStripSets } from './lib/sync/strip-engine.mjs'
 
@@ -221,7 +221,7 @@ function main() {
    * @returns {number} The exit code.
    */
   const finish = (code, action, options = {}) => {
-    if (options.restore !== false && currentBranch(root) !== protectedBranch) {
+    if (options.restore !== false && report.syncBranch !== null && currentBranch(root) !== protectedBranch) {
       recoverOwnEdits()
       const restored = git(root, ['checkout', protectedBranch])
       if (restored.exitCode !== 0) {
@@ -240,7 +240,15 @@ function main() {
   }
 
   try {
-    // 1. Preflight: prove the checkout is in a state that can be synced.
+    // 1. Preflight: prove the policy can be satisfied and the checkout can be synced.
+    const gateContract = validateRequiredGates(core.gates, core.requiredGateIds)
+    if (!gateContract.ok) {
+      addCheck(report, 'required-gates', 'fail', gateContract.problems.join('; '))
+      report.notes.push('an empty or all-optional gate list must never merge: the hard requirement is a universal over the gates')
+      report.reproduce = ['# restore core.json gates and requiredGateIds, then re-run']
+      return finish(EXIT.error, 'preflight-required-gates-invalid')
+    }
+    addCheck(report, 'required-gates', 'pass', `required gates: ${gateContract.required.map(gate => gate.id).join(', ')}`)
     if (revParse(root, 'HEAD') === null) {
       addCheck(report, 'git-repository', 'fail', `${root} is not a git repository with a resolvable HEAD`)
       return finish(EXIT.error, 'preflight-not-a-repository')
@@ -464,6 +472,15 @@ function main() {
       newResiduals: cap(strip.newResiduals, ISSUE_LIMIT).entries,
       residuals: cap(strip.residuals, ISSUE_LIMIT).entries,
       clean: strip.clean,
+      surfacesClean: strip.surfacesClean,
+      residualPolicy: {
+        blocks: strip.unhandled.length > 0,
+        unhandled: strip.unhandled.length,
+        newResiduals: strip.newResiduals.length,
+        preExistingResiduals: strip.residuals.length,
+        adjudicatedBy: 'gate-static',
+        sample: strip.newResiduals.slice(0, 10).map(residual => `${residual.path} (${residual.detail})`),
+      },
     }
     for (const section of ['deletions', 'edits', 'unhandled', 'newResiduals', 'residuals']) {
       const dropped = cap(strip[section], ISSUE_LIMIT).truncated
@@ -479,7 +496,15 @@ function main() {
       }
     }
     if (strip.newResiduals.length > 0) {
-      for (const residual of strip.newResiduals.slice(0, 10)) log(`strip new reference: ${residual.path} ${residual.detail}`)
+      log(
+        `strip: ${strip.newResiduals.length} residual reference(s) outside the strip's surfaces are recorded for the ` +
+          'static gate to adjudicate; they do not block the sync',
+      )
+      for (const residual of strip.newResiduals.slice(0, 10)) log(`strip residual: ${residual.path} ${residual.detail}`)
+      report.notes.push(
+        `${strip.newResiduals.length} residual reference(s) outside the strip's surfaces (released Session fixtures and ` +
+          'prose) are recorded for the static gate to adjudicate against its justified-residual policy',
+      )
     }
     if (strip.changed > 0) {
       const paths = [...new Set([...strip.deletions.map(deletion => deletion.path), ...strip.edits.map(edit => edit.path)])]
@@ -503,7 +528,7 @@ function main() {
       addCheck(report, 'strip-commit', 'pass', 'nothing to re-apply: the merge did not restore a stripped surface')
     }
 
-    if (!strip.clean) {
+    if (strip.unhandled.length > 0) {
       report.reproduce = reproduceCommands(core, sync.name)
       return finish(EXIT.fail, 'strip-incomplete')
     }
@@ -511,7 +536,7 @@ function main() {
     // 7b. The strip and every resolution must leave the fork's own additions alone.
     const preserved = forkLocalPreserved({
       root,
-      listAdded: addedPaths,
+      listAdded: addedPathsChecked,
       base: mergeBase(root, protectedSha, upstreamRef),
       protectedBranch,
     })
@@ -521,7 +546,8 @@ function main() {
         report,
         'fork-local-preserved',
         'fail',
-        `${preserved.missing.length} of ${preserved.checked} fork-added path(s) are missing: ${preserved.missing.join(', ')}`,
+        preserved.reason ??
+          `${preserved.missing.length} of ${preserved.checked} fork-added path(s) are missing: ${preserved.missing.join(', ')}`,
       )
       report.reproduce = [`git checkout ${sync.name}`, ...preserved.missing.map(path => `git checkout ${protectedSha} -- ${path}`)]
       return finish(EXIT.fail, 'fork-local-path-lost')
@@ -559,7 +585,7 @@ function main() {
 
     // 9. Run the gates and decide.
     report.gates = runGates({ root, gates: core.gates, date, log })
-    const decision = gateDecision(report.gates, strip.clean)
+    const decision = gateDecision(report.gates, strip.unhandled.length, core.requiredGateIds)
     if (!decision.allowed) {
       report.notes.push(...decision.blocking)
       report.reproduce = reproduceCommands(core, sync.name)

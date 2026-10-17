@@ -96,6 +96,37 @@ export function runGates({ root, gates, date, log = () => {} }) {
 }
 
 /**
+ * Prove the policy's required-gate list can actually be satisfied. The hard
+ * requirement is a universal over the gates ("merge only when every gate
+ * reports pass"), which an empty or all-optional list satisfies vacuously, so
+ * this runs before anything mutates.
+ * @param {object[]} gates Gate entries from the policy.
+ * @param {string[]} requiredGateIds Gate ids `fork/policy/core.json` requires.
+ * @returns {{ok: boolean, problems: string[], required: object[]}} Validation result.
+ */
+export function validateRequiredGates(gates, requiredGateIds) {
+  const problems = []
+  if (!Array.isArray(requiredGateIds) || requiredGateIds.length === 0) {
+    problems.push('core.json lists no requiredGateIds, so the gate list cannot be proven non-vacuous')
+    return { ok: false, problems, required: [] }
+  }
+  const required = []
+  for (const id of requiredGateIds) {
+    const gate = gates.find(entry => entry.id === id)
+    if (gate === undefined) {
+      problems.push(`required gate ${id} is absent from core.gates`)
+      continue
+    }
+    if (gate.required !== true) {
+      problems.push(`required gate ${id} is present but not marked required: true`)
+      continue
+    }
+    required.push(gate)
+  }
+  return { ok: problems.length === 0, problems, required }
+}
+
+/**
  * Map a gate exit code to the shared verdict vocabulary.
  * @param {number} exitCode Gate exit code.
  * @returns {'pass'|'fail'|'error'} Verdict; an unclassified code counts as an error.
@@ -107,18 +138,37 @@ export function verdictFor(exitCode) {
 }
 
 /**
- * Decide whether the run may continue to the protected branch.
+ * Decide whether the run may continue to the protected branch. Residual references outside the
+ * surfaces the strip owns never block here: the static gate adjudicates them against its
+ * justified-residual policy, and this decision only requires that the strip removed everything
+ * it owns.
  * @param {object[]} results Gate results.
- * @param {boolean} stripClean Whether the strip removed every reference it owns.
+ * @param {number} stripUnhandled Number of references the strip could not remove on its own surfaces.
+ * @param {string[]} [requiredGateIds] Gate ids the policy requires; an empty list never merges.
  * @returns {{allowed: boolean, blocking: string[]}} Decision and its reasons.
  */
-export function gateDecision(results, stripClean) {
+export function gateDecision(results, stripUnhandled, requiredGateIds = []) {
   const blocking = []
   for (const result of results) {
-    if (!result.required) continue
+    if (result.required !== true) continue
     if (result.verdict !== 'pass') blocking.push(`gate ${result.id} reported ${result.verdict} (exit ${result.exitCode})`)
+    if (result.report !== null && result.report !== undefined && result.report.status !== undefined && result.report.status !== 'pass') {
+      blocking.push(`gate ${result.id} exited ${result.exitCode} but wrote a report with status ${result.report.status}`)
+    }
   }
-  if (!stripClean) blocking.push('the strip reported references it could not remove')
+  const ids = Array.isArray(requiredGateIds) ? requiredGateIds : []
+  if (ids.length === 0) {
+    blocking.push('the policy lists no required gate, so no gate could have proven this sync')
+  }
+  for (const id of ids) {
+    const result = results.find(entry => entry.id === id)
+    if (result === undefined) blocking.push(`required gate ${id} produced no result`)
+    else if (result.verdict !== 'pass') blocking.push(`required gate ${id} reported ${result.verdict} (exit ${result.exitCode})`)
+  }
+  if (!results.some(result => result.required === true && result.verdict === 'pass')) {
+    blocking.push('no required gate reported pass')
+  }
+  if (stripUnhandled > 0) blocking.push(`the strip left ${stripUnhandled} reference(s) it could not remove`)
   return { allowed: blocking.length === 0, blocking }
 }
 

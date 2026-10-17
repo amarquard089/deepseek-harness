@@ -31,6 +31,7 @@ export function newSyncReport({ date, root, argv, mode, core }) {
     mode,
     policyRevision: core.policyRevision ?? null,
     fork: core.fork,
+    requiredGateIds: core.requiredGateIds ?? null,
     startedAt: new Date().toISOString(),
     finishedAt: null,
     protectedBranch: core.fork.protectedBranch,
@@ -157,10 +158,15 @@ export function renderMarkdown(report) {
       lines.push(`- Preserved stages: \`${report.merge.evidenceIndex}\``)
     }
   }
+  if (report.requiredGateIds !== undefined && report.requiredGateIds !== null) {
+    lines.push(`- Required gates from the policy: ${report.requiredGateIds.join(', ')}`)
+  }
   if (report.forkLocalPreserved !== undefined && report.forkLocalPreserved !== null) {
+    const preserved = report.forkLocalPreserved
     lines.push(
-      `- Fork-added paths preserved: ${report.forkLocalPreserved.ok} ` +
-        `(${report.forkLocalPreserved.checked} checked${report.forkLocalPreserved.missing.length > 0 ? `, missing: ${report.forkLocalPreserved.missing.join(', ')}` : ''})`,
+      `- Fork-added paths preserved: ${preserved.ok} (${preserved.checked} checked` +
+        `${preserved.missing.length > 0 ? `, missing: ${preserved.missing.join(', ')}` : ''}` +
+        `${preserved.reason ? `, ${preserved.reason}` : ''})`,
     )
   }
   if (report.merge !== null && (report.merge.untrackedConflicts ?? []).length > 0) {
@@ -195,7 +201,12 @@ export function renderMarkdown(report) {
     }
     if (report.strip.newResiduals.length > 0) {
       lines.push('')
-      lines.push(`### New mentions outside the strip's surfaces (${report.strip.newResiduals.length})`)
+      lines.push(`### Residual references outside the strip's surfaces (${report.strip.newResiduals.length})`)
+      lines.push('')
+      lines.push(
+        'These are reported, not blocking: released Session fixtures and prose legitimately keep naming a ' +
+          'retired package, and the static gate adjudicates them against its justified-residual policy.',
+      )
       lines.push('')
       for (const residual of report.strip.newResiduals) {
         lines.push(`- \`${residual.path}\` ${residual.detail} (${residual.justification})`)
@@ -239,6 +250,15 @@ export function renderMarkdown(report) {
   lines.push('## Final action')
   lines.push('')
   lines.push(`${report.finalAction} (exit ${report.exitCode})`)
+  if (report.strip !== null && report.strip.residualPolicy !== undefined) {
+    const policy = report.strip.residualPolicy
+    lines.push('')
+    lines.push(
+      `Strip surfaces clean: ${report.strip.surfacesClean}; unhandled on those surfaces: ${policy.unhandled}; ` +
+        `residual references adjudicated by \`${policy.adjudicatedBy}\`: ${policy.newResiduals} new, ` +
+        `${policy.preExistingResiduals} already on the protected branch.`,
+    )
+  }
   if (report.build !== null) {
     lines.push('')
     lines.push(`Build: \`${report.build.command}\` exit ${report.build.exitCode}` + (report.build.logPath ? `, log \`${report.build.logPath}\`` : ''))

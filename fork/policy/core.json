@@ -86,5 +86,10 @@
       "required": true,
       "description": "Runtime proof that no non-allowlisted outbound connection is attempted."
     }
-  ]
+  ],
+  "requiredGateIds": [
+    "static",
+    "egress"
+  ],
+  "requiredGateIdsNote": "The hard requirement is a universal over the gate list, which an empty list satisfies vacuously. Every id listed here must exist in `gates`, be `required: true`, and produce a result, or the sync fails before it mutates anything. Removing a gate is therefore not a way to merge without it."
 }

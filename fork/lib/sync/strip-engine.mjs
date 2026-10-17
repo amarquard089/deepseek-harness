@@ -96,7 +96,12 @@ export function deletionTargets(root, documentationPaths) {
  * @param {object} options.core Parsed `fork/policy/core.json`.
  * @param {boolean} [options.dryRun] Report the changes without writing them.
  * @param {string|null} [options.baselineRef] Revision that already carries the fork's accepted residual references, used to separate pre-existing references from new ones.
- * @returns {{dryRun: boolean, baselineRef: string|null, deletions: object[], edits: object[], unhandled: object[], residuals: object[], newResiduals: object[], changed: number, filesChanged: number, clean: boolean}} Strip result.
+ * `clean` means nothing at all remains anywhere, which a real sync rarely satisfies because
+ * released Session fixtures and prose legitimately keep naming a retired package. `surfacesClean`
+ * means the strip removed every reference on the surfaces it owns, which is the condition the
+ * orchestrator blocks on; residual references outside those surfaces are adjudicated by the
+ * static gate, whose justified-residual policy owns them.
+ * @returns {{dryRun: boolean, baselineRef: string|null, deletions: object[], edits: object[], unhandled: object[], residuals: object[], newResiduals: object[], changed: number, filesChanged: number, clean: boolean, surfacesClean: boolean}} Strip result.
  */
 export function applyStrip({ root, core, dryRun = false, baselineRef = null }) {
   const sets = deriveStripSets(core)
@@ -111,6 +116,7 @@ export function applyStrip({ root, core, dryRun = false, baselineRef = null }) {
     changed: 0,
     filesChanged: 0,
     clean: true,
+    surfacesClean: true,
   }
   // Plan every write before performing any of them: a failure while planning
   // leaves the tree untouched, so a crashed run never leaves a half-stripped tree.
@@ -175,7 +181,8 @@ export function applyStrip({ root, core, dryRun = false, baselineRef = null }) {
   result.deletions = deletions
   result.edits = edits.map(({ path, kind, changes }) => ({ path, kind, changes }))
   result.filesChanged = result.deletions.length + result.edits.length
-  result.clean = result.unhandled.length === 0 && result.newResiduals.length === 0
+  result.surfacesClean = result.unhandled.length === 0
+  result.clean = result.surfacesClean && result.newResiduals.length === 0
   return result
 }
 
@@ -343,7 +350,66 @@ function removeJsonLines(text, select) {
   if (parseJson(text) !== null && parseJson(next) === null) {
     return { text, changes: [], refused: candidates.map(candidate => candidate.key || 'deleted artifact reference') }
   }
+  if (next.trim() === '' || (!jsonStructureBalanced(next) && jsonStructureBalanced(text))) {
+    return { text, changes: [], refused: candidates.map(candidate => candidate.key || 'deleted artifact reference') }
+  }
   return { text: next, changes, refused: [] }
+}
+
+/**
+ * Check that braces and brackets balance outside strings and comments, which is
+ * the cheapest structural check a JSON-with-comments document can carry before a
+ * line edit is written back.
+ * @param {string} text JSON or JSON-with-comments text.
+ * @returns {boolean} True when the document is structurally balanced.
+ */
+function jsonStructureBalanced(text) {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  let inLineComment = false
+  let inBlockComment = false
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index]
+    const next = text[index + 1]
+    if (inLineComment) {
+      if (character === '\n') inLineComment = false
+      continue
+    }
+    if (inBlockComment) {
+      if (character === '*' && next === '/') {
+        inBlockComment = false
+        index += 1
+      }
+      continue
+    }
+    if (inString) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') inString = false
+      continue
+    }
+    if (character === '"') {
+      inString = true
+      continue
+    }
+    if (character === '/' && next === '/') {
+      inLineComment = true
+      index += 1
+      continue
+    }
+    if (character === '/' && next === '*') {
+      inBlockComment = true
+      index += 1
+      continue
+    }
+    if (character === '{' || character === '[') depth += 1
+    else if (character === '}' || character === ']') {
+      depth -= 1
+      if (depth < 0) return false
+    }
+  }
+  return depth === 0
 }
 
 /**
@@ -409,7 +475,25 @@ function stripCordis(text, sets) {
     changes.push({ line: start + 1, detail })
   }
   if (remove.size === 0) return { text, changes: [], refused: [] }
-  return { text: lines.filter((_, index) => !remove.has(index)).join('\n'), changes, refused: [] }
+  const kept = lines.filter((_, index) => !remove.has(index))
+  if (kept.every(line => line.trim() === '' || line.trimStart().startsWith('#'))) {
+    return { text: emptyPatchText(), changes, refused: [] }
+  }
+  return { text: kept.join('\n'), changes, refused: [] }
+}
+
+/**
+ * Render the valid empty patch a composition document becomes when its last entry
+ * is removed. An empty file parses to `undefined` and breaks every consumer of
+ * `PatchOptions[]`, so the strip always leaves an explicit empty sequence.
+ *
+ * The comment deliberately names no removed identifier: the static gate's
+ * stripped-identifier and composition rules match the identifiers themselves, so
+ * an explanatory comment that repeated one would keep failing the gate.
+ * @returns {string} File text holding an explanatory comment and an empty sequence.
+ */
+function emptyPatchText() {
+  return "# The telemetry strip removed this document's only composition patch; an empty sequence keeps it parseable.\n[]\n"
 }
 
 /**
