@@ -557,6 +557,10 @@ process.exit(0)
 /** Remove every scratch artifact this suite created. */
 function cleanup() {
   run('git', ['worktree', 'remove', '--force', WORKTREE])
+  // A worktree whose directory is already gone leaves a stale registration that
+  // only `prune` clears, so remove the directory unconditionally and prune after;
+  // otherwise an interrupted run can leave this repository listing a worktree.
+  rmSync(WORKTREE, { recursive: true, force: true })
   run('git', ['worktree', 'prune'])
   rmSync(SYMROOT, { recursive: true, force: true })
 }

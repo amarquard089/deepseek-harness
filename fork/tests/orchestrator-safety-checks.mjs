@@ -202,7 +202,7 @@ function orchestratorChecks(base) {
  */
 async function invariantChecks(modules) {
   console.log('\n== forkLocalPreserved ==')
-  const { forkLocalPreserved } = modules
+  const { forkLocalPreserved, addedPathsChecked, mergeBase } = modules
   gitIn(['checkout', '-q', '-b', 'fork-local-probe', 'master'])
   writeFileSync(join(CLONE, 'FORK-ADDED.txt'), 'fork-local\n')
   gitIn(['add', '-A'])
