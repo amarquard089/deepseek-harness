@@ -22,7 +22,7 @@ The identity group provides one anonymous id per harness home that the installat
 
 | Package | Role |
 |---|---|
-| [`anonymous-user-id`](anonymous-user-id/README.md) | Gives every harness home one anonymous id used by feedback acknowledgements and DeepSeek request headers |
+| [`anonymous-user-id`](anonymous-user-id/README.md) | Gives every harness home one anonymous id a local feature or composition can correlate its records with |
 
 <a id="related-documentation"></a>
 ## Related documentation

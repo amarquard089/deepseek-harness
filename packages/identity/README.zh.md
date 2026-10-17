@@ -22,7 +22,7 @@ identity 组为每个 harness home 提供一个匿名 id，该安装的遥测、
 
 | 包 | 职责 |
 |---|---|
-| [`anonymous-user-id`](anonymous-user-id/README.zh.md) | 让每个 harness home 拥有一个匿名 id，遥测、反馈与 DeepSeek 请求把它附加到记录上，使来自同一安装的记录无需识别用户即可被辨认 |
+| [`anonymous-user-id`](anonymous-user-id/README.zh.md) | 让每个 harness home 拥有一个匿名 id，本地功能或组合可用它关联自身记录 |
 
 <a id="related-documentation"></a>
 ## 相关文档
