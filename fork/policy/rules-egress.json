@@ -1,0 +1,377 @@
+{
+  "schema": "dsh-fork-policy-egress/v1",
+  "policyRevision": "2026-10-17",
+  "description": "Runtime egress probe matrix for the fork's hard requirement: no outbound connection may originate from the harness except model inference, web search/fetch, and MCP servers the repository owner configured.",
+  "instrumentation": {
+    "shim": "fork/egress-shim.mjs",
+    "gate": "fork/verify-egress.mjs",
+    "evidenceEnv": "DSH_FORK_EGRESS_LOG",
+    "undiciAnchorsEnv": "DSH_FORK_EGRESS_UNDICI_ANCHORS",
+    "note": "The shim is injected through NODE_OPTIONS and re-propagates itself, so Node child processes are intercepted too. Control probes prove the injection path, the classification, the violation pipeline, and child coverage before any profile probe runs."
+  },
+  "allowPolicy": {
+    "default": [],
+    "note": "The allowlist is empty by default and the repository itself admits nothing: there is no provider host, no wildcard, and no blanket pattern here. A destination is admitted only when the repository owner names it explicitly, either in a probe's allowHosts or at run time through ownerAllow.env. With the env var unset and every probe at allowHosts: [], the number of permitted hosts is exactly zero, which is what the keyless probes assert; a probe that declares a non-empty allowHosts while the owner configured nothing is reported as status=error, and a bare * in the owner configuration is rejected outright.",
+    "ownerAllow": {
+      "env": "DSH_FORK_EGRESS_ALLOW",
+      "format": "comma-separated host[:port] entries, for example api.example.invalid:443,mcp.example.invalid",
+      "inRepoDefault": "unset",
+      "blanketPatternsAccepted": false,
+      "blanketPatternNote": "A bare `*` host is rejected outright: an allow-everything entry would make this gate meaningless. A scoped pattern such as *.example.invalid is accepted because the owner named that domain."
+    },
+    "admittedPurposes": [
+      "model inference, web search/fetch, and owner-configured MCP servers are the only permitted outbound purposes; none of them is admitted unless the owner configures its destination"
+    ]
+  },
+  "allowHosts": [],
+  "undiciAnchors": [
+    "packages/util/http-proxy",
+    "packages/web/web-fetch-http"
+  ],
+  "requiredLayers": [
+    "net",
+    "tls",
+    "dns",
+    "http",
+    "https",
+    "fetch"
+  ],
+  "reportMaxRecordsPerProbe": 500,
+  "probeDefaults": {
+    "timeoutMs": 180000,
+    "killGraceMs": 8000,
+    "envStrip": [
+      "DEEPSEEK_API_KEY",
+      "DEEPSEEK_BASE_URL",
+      "DEEPSEEK_ORG_ID",
+      "OPENAI_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "DSH_SNAPSHOT"
+    ]
+  },
+  "probes": [
+    {
+      "id": "shim-load",
+      "purpose": "control",
+      "description": "Trivial Node process started with the gate's NODE_OPTIONS injection; must produce a heartbeat naming this shim, with the recorder enabled and every required layer installed. Without it the gate's injection path is unproven.",
+      "command": "{node}",
+      "args": [
+        "-e",
+        "process.exit(0)"
+      ],
+      "injectShim": true,
+      "timeoutMs": 60000,
+      "allowHosts": [],
+      "expectExitCodes": [
+        0
+      ],
+      "expect": {
+        "heartbeat": true,
+        "records": []
+      }
+    },
+    {
+      "id": "self-check",
+      "purpose": "control",
+      "description": "Deliberate attempts from the probed process, a worker thread, and a spawned child: a closed loopback port (must be recorded and classified local, and must really be refused by the kernel), reserved external-looking addresses (must be recorded, classified egress, and flagged by the violation pipeline), a request through the repository's own undici dependency (must be recorded by the dispatcher layer, not only by the net layer underneath it), a connect inside a worker thread (proves the shim preloads itself into workers the harness constructs with an empty execArgv), and a reserved DNS name (must be recorded).",
+      "command": "{node}",
+      "args": [
+        "--import",
+        "{shim}",
+        "fork/lib/egress/self-check.mjs"
+      ],
+      "injectShim": false,
+      "timeoutMs": 60000,
+      "allowHosts": [],
+      "expectExitCodes": [
+        0
+      ],
+      "expectViolations": [
+        {
+          "host": "203.0.113.1",
+          "port": 443
+        },
+        {
+          "host": "203.0.113.11",
+          "port": 8443
+        },
+        {
+          "host": "198.51.100.7",
+          "port": 9443
+        },
+        {
+          "host": "egress-self-check.invalid"
+        },
+        {
+          "host": "192.0.2.9",
+          "port": 7443
+        }
+      ],
+      "expect": {
+        "heartbeat": true,
+        "selfCheckMarker": "DSH_FORK_EGRESS_SELFCHECK",
+        "childHost": "198.51.100.7",
+        "records": [
+          {
+            "kind": "connect",
+            "layer": "net",
+            "protocol": "tcp",
+            "host": "127.0.0.1",
+            "classification": "local"
+          },
+          {
+            "kind": "connect",
+            "layer": "net",
+            "protocol": "tcp",
+            "host": "203.0.113.1",
+            "port": 443,
+            "classification": "egress"
+          },
+          {
+            "kind": "undici",
+            "layer": "undici",
+            "protocol": "http",
+            "host": "203.0.113.11",
+            "port": 8443,
+            "classification": "egress"
+          },
+          {
+            "kind": "connect",
+            "layer": "net",
+            "protocol": "tcp",
+            "host": "192.0.2.9",
+            "port": 7443,
+            "classification": "egress"
+          },
+          {
+            "kind": "connect",
+            "layer": "net",
+            "protocol": "tcp",
+            "host": "198.51.100.7",
+            "port": 9443,
+            "classification": "egress",
+            "childOf": "root"
+          },
+          {
+            "kind": "dns",
+            "layer": "dns",
+            "protocol": "dns",
+            "host": "egress-self-check.invalid",
+            "classification": "egress"
+          }
+        ],
+        "workerHost": "192.0.2.9"
+      }
+    },
+    {
+      "id": "headless-help",
+      "purpose": "gate",
+      "description": "Boots the shipped headless profile (base + headless bundles) from source through tsx and prints the headless app's own help, which requires the app plugin to be mounted. Keyless.",
+      "command": "{node}",
+      "args": [
+        "--import",
+        "tsx/esm",
+        "apps/cli/src/bin.ts",
+        "--profile",
+        "headless",
+        "--help"
+      ],
+      "timeoutMs": 120000,
+      "allowHosts": [],
+      "expectExitCodes": [
+        0
+      ],
+      "expect": {
+        "heartbeat": true,
+        "output": [
+          {
+            "stream": "stdout",
+            "anyOf": [
+              "Usage: dsh --profile headless"
+            ],
+            "label": "headless app help"
+          }
+        ]
+      }
+    },
+    {
+      "id": "headless-keyless-task",
+      "purpose": "gate",
+      "description": "Boots the shipped headless profile and runs one task with no API key: the run must reach the credential check, fail loud on the missing key, and make no outbound attempt at all.",
+      "command": "{node}",
+      "args": [
+        "--import",
+        "tsx/esm",
+        "apps/cli/src/bin.ts",
+        "--profile",
+        "headless",
+        "say hi"
+      ],
+      "timeoutMs": 120000,
+      "allowHosts": [],
+      "expectExitCodes": [
+        1
+      ],
+      "expect": {
+        "heartbeat": true,
+        "output": [
+          {
+            "stream": "stderr",
+            "anyOf": [
+              "MISSING_CREDENTIAL",
+              "no API key",
+              "API key"
+            ],
+            "label": "the run reached the credential check and reported the missing key"
+          }
+        ]
+      }
+    },
+    {
+      "id": "web-host",
+      "purpose": "gate",
+      "description": "Boots the shipped web profile (base + web-app bundles) from source and serves the Web host on an OS-assigned loopback port; the gate stops it with SIGTERM after the liveness window. Keyless.",
+      "command": "{node}",
+      "args": [
+        "--import",
+        "tsx/esm",
+        "apps/cli/src/bin.ts",
+        "web",
+        "--no-open",
+        "--port",
+        "0"
+      ],
+      "expectAliveMs": 12000,
+      "killGraceMs": 8000,
+      "timeoutMs": 120000,
+      "allowHosts": [],
+      "expectExitCodes": [
+        0
+      ],
+      "expect": {
+        "heartbeat": true,
+        "output": [
+          {
+            "stream": "stdout",
+            "anyOf": [
+              "dsh web: http://127.0.0.1:",
+              "http://127.0.0.1:"
+            ],
+            "label": "web host bound to loopback"
+          }
+        ]
+      }
+    },
+    {
+      "id": "acp-help",
+      "purpose": "gate",
+      "description": "Boots the shipped acp profile (base + acp-app bundles) from source and prints its own help. Keyless.",
+      "command": "{node}",
+      "args": [
+        "--import",
+        "tsx/esm",
+        "apps/cli/src/bin.ts",
+        "--profile",
+        "acp",
+        "--help"
+      ],
+      "timeoutMs": 120000,
+      "allowHosts": [],
+      "expectExitCodes": [
+        0
+      ],
+      "expect": {
+        "heartbeat": true,
+        "output": [
+          {
+            "stream": "stdout",
+            "anyOf": [
+              "Usage: dsh --profile acp"
+            ],
+            "label": "acp app help"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sdk-help",
+      "purpose": "gate",
+      "description": "Boots the shipped sdk profile (base + sdk-app bundles) from source and prints its own help. Keyless.",
+      "command": "{node}",
+      "args": [
+        "--import",
+        "tsx/esm",
+        "apps/cli/src/bin.ts",
+        "--profile",
+        "sdk",
+        "--help"
+      ],
+      "timeoutMs": 120000,
+      "allowHosts": [],
+      "expectExitCodes": [
+        0
+      ],
+      "expect": {
+        "heartbeat": true,
+        "output": [
+          {
+            "stream": "stdout",
+            "anyOf": [
+              "Usage: dsh --profile sdk"
+            ],
+            "label": "sdk app help"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sdk-minimal-help",
+      "purpose": "gate",
+      "description": "Boots the shipped sdk-minimal profile (sdk-minimal bundle only) from source and prints its own help. Keyless.",
+      "command": "{node}",
+      "args": [
+        "--import",
+        "tsx/esm",
+        "apps/cli/src/bin.ts",
+        "--profile",
+        "sdk-minimal",
+        "--help"
+      ],
+      "timeoutMs": 120000,
+      "allowHosts": [],
+      "expectExitCodes": [
+        0
+      ],
+      "expect": {
+        "heartbeat": true,
+        "output": [
+          {
+            "stream": "stdout",
+            "anyOf": [
+              "Usage: dsh --profile sdk-minimal"
+            ],
+            "label": "sdk-minimal app help"
+          }
+        ]
+      }
+    }
+  ],
+  "skippedProbes": [
+    {
+      "id": "desktop-main",
+      "reason": "the desktop profile is owned by the Electron application and `dsh --profile desktop` is rejected by the launcher; an Electron main process cannot boot headless in this gate, so the desktop main process egress surface is NOT proved here"
+    },
+    {
+      "id": "base",
+      "reason": "the base bundle is a composition layer with no app plugin: `--profile base` would mount and idle with nothing to terminate. Its surface is covered by every profile probe that starts from base"
+    }
+  ],
+  "knownLimitations": [
+    "A non-Node child process (curl, git, ssh, a native binary) cannot be intercepted from inside this process. The shim records its command line as a spawn record so the gate can see it, but kernel-level proof for such a child needs an OS network sandbox instead.",
+    "Interception records prove what the harness attempted in JavaScript at the moment of the call, before the connection completes. They are not a packet capture.",
+    "NODE_OPTIONS propagation covers Node children, and worker threads are covered by preloading this same shim with --require (Node honors --require but ignores --import in a worker's execArgv). A process that loads the shim by neither route is invisible to this gate; the shim-load and self-check control probes prove both routes.",
+    "A worker that runs with a sanitized environment omits DSH_FORK_EGRESS_LOG and records nothing; its shim says so on stderr, and the gate reports the missing expected record as status=error rather than a pass.",
+    "A closing port race can reuse the loopback port the self-check reserved; the control still proves the interception because the record is written at call time, and the ECONNREFUSED assertion fails loud if the port was taken.",
+    "The gate observes attempts and admits only what the owner explicitly configured, so it cannot certify a destination as permitted by inspecting it. The allowlist is empty in this repository, which is why every keyless probe expects exactly zero egress."
+  ]
+}

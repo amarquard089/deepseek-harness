@@ -1,0 +1,657 @@
+{
+  "schema": "dsh-fork-static-rules/v1",
+  "policyRevision": "2026-10-17",
+  "scan": {
+    "excludeDirectories": [
+      ".git",
+      "node_modules",
+      "lib",
+      "dist",
+      ".turbo",
+      ".cache",
+      "coverage",
+      "out",
+      "fork/reports",
+      "fork/state",
+      "fork/worktrees"
+    ],
+    "maxTextFileBytes": 4194304,
+    "maxArtifactFileBytes": 8388608,
+    "ioConcurrency": 16,
+    "textExtensions": [
+      ".ts",
+      ".tsx",
+      ".mts",
+      ".cts",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".json",
+      ".jsonl",
+      ".yml",
+      ".yaml",
+      ".md",
+      ".py",
+      ".sh",
+      ".toml",
+      ".html",
+      ".css",
+      ".patch",
+      ".txt"
+    ],
+    "artifactExtensions": [".js", ".mjs", ".cjs", ".json", ".ts", ".html", ".css"],
+    "codeExtensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".py", ".sh", ".patch"]
+  },
+  "artifactRoots": [
+    "packages/*/*/lib/**",
+    "packages/*/*/dist/**",
+    "apps/*/lib/**",
+    "apps/*/dist/**",
+    "apps/*/dist-electron/**"
+  ],
+  "compositionGlobs": [
+    "**/cordis.yml",
+    "**/cordis.yaml",
+    "**/cordis.patch.yml",
+    "**/cordis.snapshot.yml",
+    "**/*.cordis.yml",
+    "apps/cli/composition.md",
+    "docs/cordis-api/inherited.md",
+    "packages/extensions/tool-cordis/src/api-catalog.ts"
+  ],
+  "strippedIdentifiers": [
+    {
+      "token": "otel",
+      "kind": "cordis-service",
+      "derivedFrom": "packages/telemetry/otel",
+      "evidence": "packages/telemetry/otel/src/index.ts (upstream): `declare module '@deepseek-ai/cordis' { interface Context { otel: OTel } }`",
+      "reason": "The removed shared OTLP transport exposed the `otel` cordis service; any composition or source naming it is a re-introduction."
+    },
+    {
+      "token": "productTelemetry",
+      "kind": "cordis-service",
+      "evidence": "packages/host/product-telemetry-otel/src/index.ts (upstream): `interface Context { productTelemetry: ProductTelemetry }`",
+      "reason": "The removed Host analytics sender exposed the `productTelemetry` service to every composition that emitted a product event."
+    },
+    {
+      "token": "productAnalytics",
+      "kind": "cordis-service",
+      "evidence": "packages/client/product-analytics/src/index.ts (upstream): `interface Context { productAnalytics: ProductAnalytics }`",
+      "reason": "The removed Desktop analytics RPC exposed the `productAnalytics` service; its return re-enables authenticated event intake."
+    },
+    {
+      "token": "sessionTelemetry",
+      "kind": "cordis-service",
+      "evidence": "packages/session/session-telemetry-otel/src/index.ts (upstream): `SessionTelemetryBackend` registers the `sessionTelemetry` service",
+      "reason": "The removed Session-sharing seam registered `sessionTelemetry`; its return re-enables feedback-triggered Session upload."
+    },
+    {
+      "token": "session-log-deepseek",
+      "kind": "plugin-id-and-event-namespace",
+      "derivedFrom": "packages/session/session-log-deepseek",
+      "evidence": "packages/session/session-log-deepseek/src/index.ts (upstream): `export const name = 'session-log-deepseek'` and the `dsh_session_log` request field",
+      "reason": "The removed incremental Session-log uploader is both a plugin id and the namespace of the persisted `session-log-deepseek/delivery-accepted` event."
+    },
+    {
+      "token": "session-telemetry",
+      "kind": "plugin-id",
+      "derivedFrom": "packages/session/session-telemetry",
+      "evidence": "packages/session/session-telemetry/src/index.ts (upstream): cordis plugin name `session-telemetry`",
+      "reason": "The removed Session-telemetry capability definition; its return restores the capture seam."
+    },
+    {
+      "token": "session-telemetry-otel",
+      "kind": "plugin-id",
+      "derivedFrom": "packages/session/session-telemetry-otel",
+      "evidence": "packages/session/session-telemetry-otel/package.json (upstream): name `@deepseek-ai/dsh-session-telemetry-otel`",
+      "reason": "The removed Session-upload Service Provider; its return re-enables OTLP Session delivery."
+    },
+    {
+      "token": "product-analytics",
+      "kind": "plugin-id",
+      "derivedFrom": "packages/client/product-analytics",
+      "evidence": "packages/client/product-analytics/package.json (upstream): name `@deepseek-ai/dsh-client-product-analytics`",
+      "reason": "The removed Desktop analytics package id."
+    },
+    {
+      "token": "product-telemetry-otel",
+      "kind": "plugin-id",
+      "derivedFrom": "packages/host/product-telemetry-otel",
+      "evidence": "packages/host/product-telemetry-otel/package.json (upstream): name `@deepseek-ai/dsh-host-product-telemetry-otel`",
+      "reason": "The removed Host analytics Service Provider; its return restores the default collector endpoint."
+    },
+    {
+      "token": "ui-settings-session-log",
+      "kind": "plugin-id",
+      "derivedFrom": "packages/client/ui-settings-session-log",
+      "evidence": "packages/client/ui-settings-session-log/package.json (upstream): name `@deepseek-ai/dsh-client-ui-settings-session-log`",
+      "reason": "The removed Session-log upload preference surface; its return restores the user-visible upload switch."
+    },
+    {
+      "token": "plugin-package-inventory-deepseek",
+      "kind": "plugin-id",
+      "derivedFrom": "packages/llm/plugin-package-inventory-deepseek",
+      "evidence": "packages/llm/plugin-package-inventory-deepseek/src/index.ts (upstream): `export const name = 'plugin-package-inventory-deepseek'`; contributes `dsh_plugin_packages`",
+      "reason": "The removed plugin-inventory request contribution leaks installed package identities to the official API."
+    }
+  ],
+  "forbiddenDependencies": [
+    {
+      "name": "@opentelemetry/sdk-logs",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies"
+    },
+    {
+      "name": "@opentelemetry/otlp-exporter-base",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies"
+    },
+    {
+      "name": "@opentelemetry/otlp-transformer",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies"
+    },
+    {
+      "name": "@opentelemetry/api-logs",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies"
+    },
+    {
+      "name": "@opentelemetry/resources",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies"
+    },
+    {
+      "name": "@opentelemetry/core",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies; only a direct workspace declaration is a violation"
+    },
+    {
+      "name": "@opentelemetry/api",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies; only a direct workspace declaration is a violation"
+    },
+    {
+      "name": "got",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies, the OTLP event transport HTTP client"
+    },
+    {
+      "name": "@earendil-works/pi-telemetry",
+      "evidence": "pnpm-lock.yaml: transitive dependency of '@earendil-works/pi-ai@1.1.0', which packages/llm/llm-pi-ai declares and packages/bundle/base composes"
+    },
+    {
+      "name": "@sentry/browser",
+      "evidence": "prospective upstream crash reporting"
+    },
+    {
+      "name": "@sentry/node",
+      "evidence": "prospective upstream crash reporting"
+    },
+    {
+      "name": "@sentry/react",
+      "evidence": "prospective upstream crash reporting"
+    },
+    {
+      "name": "@sentry/electron",
+      "evidence": "prospective upstream crash reporting"
+    },
+    {
+      "name": "@bugsnag/js",
+      "evidence": "prospective upstream crash reporting"
+    },
+    {
+      "name": "@bugsnag/browser",
+      "evidence": "prospective upstream crash reporting"
+    },
+    {
+      "name": "@bugsnag/node",
+      "evidence": "prospective upstream crash reporting"
+    },
+    {
+      "name": "posthog-js",
+      "evidence": "prospective upstream product analytics"
+    },
+    {
+      "name": "posthog-node",
+      "evidence": "prospective upstream product analytics"
+    },
+    {
+      "name": "mixpanel-browser",
+      "evidence": "prospective upstream product analytics"
+    },
+    {
+      "name": "@amplitude/analytics-browser",
+      "evidence": "prospective upstream product analytics"
+    },
+    {
+      "name": "@segment/analytics-next",
+      "evidence": "prospective upstream product analytics"
+    },
+    {
+      "name": "@datadog/browser-rum",
+      "evidence": "prospective upstream real-user monitoring"
+    },
+    {
+      "name": "dd-trace",
+      "evidence": "prospective upstream APM tracing"
+    },
+    {
+      "name": "@microsoft/applicationinsights-web",
+      "evidence": "prospective upstream telemetry"
+    },
+    {
+      "name": "rollbar",
+      "evidence": "prospective upstream crash reporting"
+    },
+    {
+      "name": "@vercel/analytics",
+      "evidence": "prospective upstream product analytics"
+    }
+  ],
+  "transitiveTelemetryPackages": [
+    {
+      "name": "@earendil-works/pi-telemetry",
+      "declaredBy": "@earendil-works/pi-ai",
+      "evidence": "pnpm-lock.yaml '@earendil-works/pi-ai@1.1.0' dependencies",
+      "reason": "Third-party telemetry package inside the dependency closure of a composed provider; the static gate cannot prove it stays inert, so the runtime egress gate owns that proof."
+    }
+  ],
+  "contentRules": [
+    {
+      "id": "telemetry.endpoint-host",
+      "needle": "deepseeksvc",
+      "pattern": "deepseeksvc\\.com",
+      "severity": "blocker",
+      "evidence": "packages/host/product-telemetry-otel/src/index.ts (upstream): endpoint default 'https://dsh-otel-collector.deepseeksvc.com/v1/logs'",
+      "reason": "The removed product-analytics collector host.",
+      "remedy": "Remove the endpoint and the code path that reaches it; the fork ships no telemetry destination."
+    },
+    {
+      "id": "telemetry.otlp-collector-url",
+      "needle": "otel-collector",
+      "pattern": "dsh-otel-collector",
+      "severity": "blocker",
+      "evidence": "packages/host/product-telemetry-otel/src/index.ts (upstream) endpoint default",
+      "reason": "The removed collector host name.",
+      "remedy": "Delete the collector reference; no OTLP destination exists in this fork."
+    },
+    {
+      "id": "telemetry.otlp-channel-header",
+      "needle": "dsh_otel_report",
+      "pattern": "dsh_otel_report",
+      "severity": "blocker",
+      "evidence": "packages/host/product-telemetry-otel/src/index.ts (upstream): channel default 'dsh_otel_report' sent as the x-channel header",
+      "reason": "Collector routing header value used by the removed Host analytics sender.",
+      "remedy": "Remove the channel header and its configuration field."
+    },
+    {
+      "id": "telemetry.otlp-sdk-import",
+      "needle": "@opentelemetry/",
+      "pattern": "['\"]@opentelemetry/(sdk-logs|api-logs|otlp-exporter-base|otlp-transformer|resources)['\"]",
+      "severity": "blocker",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies; imports in src/transport.ts and src/session-log.ts",
+      "reason": "The OTel SDK packages the fork removed appear again as an import or manifest entry.",
+      "remedy": "Delete the OTel SDK dependency and the pipeline that used it."
+    },
+    {
+      "id": "telemetry.otlp-sdk-identifier",
+      "needle": "OTLPExporterBase",
+      "pattern": "\\b(OTLPExporterBase|createOtlpHttpExportDelegate|createOtlpNetworkExportDelegate|JsonLogsSerializer|LoggerProvider|BatchLogRecordProcessor|resourceFromAttributes)\\b",
+      "severity": "blocker",
+      "evidence": "packages/telemetry/otel/src/transport.ts and src/session-log.ts (upstream)",
+      "reason": "OTel SDK APIs the fork removed from its own code.",
+      "remedy": "Remove the SDK pipeline."
+    },
+    {
+      "id": "telemetry.otlp-env-read",
+      "needle": "OTEL_EXPORTER_OTLP",
+      "pattern": "\\bOTEL_[A-Z_]+\\b",
+      "severity": "blocker",
+      "evidence": "packages/telemetry/otel/src/transport.ts (upstream) resolves OTEL_EXPORTER_OTLP_LOGS_* through getSharedConfigurationFromEnvironment('LOGS')",
+      "reason": "An ambient OTEL_* variable can re-point a pipeline at a collector without any composition change.",
+      "remedy": "Remove the environment read; the fork reads no OTLP configuration."
+    },
+    {
+      "id": "telemetry.session-log-upload-field",
+      "needle": "dsh_session_log",
+      "pattern": "dsh_session_log",
+      "severity": "blocker",
+      "evidence": "packages/session/session-log-deepseek/src/types.ts (upstream): DeepSeekLlmApiExtensionMap member 'dsh_session_log'",
+      "reason": "The removed Session-log upload travelled as this official-API request field.",
+      "remedy": "Remove the request extension; the fork uploads no Session content."
+    },
+    {
+      "id": "telemetry.plugin-inventory-field",
+      "needle": "dsh_plugin_packages",
+      "pattern": "dsh_plugin_packages",
+      "severity": "blocker",
+      "evidence": "packages/llm/plugin-package-inventory-deepseek/src/types.ts (upstream): DeepSeekLlmApiExtensionMap member 'dsh_plugin_packages'",
+      "reason": "The removed request field reported installed plugin packages to the official API.",
+      "remedy": "Remove the request extension."
+    },
+    {
+      "id": "telemetry.session-log-upload-path",
+      "needle": "upload",
+      "pattern": "(session[-_]log[^\\n]{0,40}upload|upload[^\\n]{0,40}session[-_]log)",
+      "severity": "blocker",
+      "manifestSeverity": "warning",
+      "evidence": ".agents/notes/implemented/architecture/2026-09-24-bounded-session-log-upload.md (upstream design) plus packages/session/session-log-deepseek (upstream)",
+      "reason": "Code, configuration, or a manifest names the removed Session-log upload surface. Code can send the data, so it blocks; a manifest or document string cannot, so it is reported as a warning for cleanup.",
+      "remedy": "Remove the reference; the fork never sends Session logs off the machine and ships no uploader to reference."
+    },
+    {
+      "id": "telemetry.analytics-sdk",
+      "needle": "sentry",
+      "pattern": "\\b(@sentry/[a-z-]+|Sentry\\.init|sentry|bugsnag|Bugsnag|crashlytics|Crashlytics|captureException|posthog|mixpanel|amplitude|@segment/analytics|dd-trace|@datadog/browser-rum|react-ga4|googletagmanager|gtag\\(|@vercel/analytics|plausible|umami|@microsoft/applicationinsights|rollbar)\\b",
+      "severity": "blocker",
+      "evidence": "prospective: the denylist in fork/policy/core.json has no analytics SDK entry yet, and upstream adds product analytics regularly",
+      "reason": "A known product-analytics or crash-reporting SDK identifier appeared in the tree.",
+      "remedy": "Remove the SDK, or add a justifiedResiduals entry with the reason the reference cannot carry data."
+    },
+    {
+      "id": "telemetry.send-beacon",
+      "needle": "sendBeacon",
+      "pattern": "navigator\\.sendBeacon",
+      "severity": "blocker",
+      "evidence": "prospective: phone-home beacon, not used by the fork",
+      "reason": "navigator.sendBeacon is a fire-and-forget outbound request; a new one is telemetry until proven otherwise.",
+      "remedy": "Remove the beacon, or justify it in justifiedResiduals with the receiving endpoint."
+    },
+    {
+      "id": "telemetry.phone-home-endpoint",
+      "needle": "://",
+      "pattern": "https?://[a-z0-9.-]*(collector|telemetry|analytics|metrics|beacon|ingest)[a-z0-9.-]*\\.[a-z]{2,}",
+      "severity": "warning",
+      "evidence": "prospective: coarse net for a new telemetry destination that is not yet on the denylist",
+      "reason": "A URL whose host names a telemetry purpose may be a new phone-home destination.",
+      "remedy": "Confirm the destination against the egress allowlist, then add it to core.json's denylist or justify it."
+    },
+    {
+      "id": "telemetry.telemetry-named-file",
+      "needle": "telemetry",
+      "pattern": "(telemetry|product-analytics|phone-home|crash-report|beacon|sentry)",
+      "severity": "warning",
+      "evidence": "prospective: a new file named for telemetry is the cheapest way for upstream to re-add collection",
+      "reason": "A file whose path names telemetry, analytics, or crash reporting appeared under a shipped tree.",
+      "remedy": "Inspect the file; if it collects or reports anything, remove it, otherwise add a narrow path scope with the reason."
+    }
+  ],
+  "artifactMarkers": [
+    {
+      "id": "artifact.endpoint-host",
+      "needle": "deepseeksvc",
+      "severity": "blocker",
+      "evidence": "packages/host/product-telemetry-otel/src/index.ts (upstream) endpoint default",
+      "reason": "A built artifact carries the removed collector host.",
+      "remedy": "Rebuild after removing the source path that emits it, and check the sources this artifact was built from."
+    },
+    {
+      "id": "artifact.otlp-channel-header",
+      "needle": "dsh_otel_report",
+      "severity": "blocker",
+      "evidence": "packages/host/product-telemetry-otel/src/index.ts (upstream) channel default",
+      "reason": "A built artifact carries the removed collector channel header.",
+      "remedy": "Rebuild after removing the source path that emits it."
+    },
+    {
+      "id": "artifact.otlp-sdk",
+      "needle": "@opentelemetry/",
+      "severity": "blocker",
+      "evidence": "packages/telemetry/otel/package.json (upstream) dependencies",
+      "reason": "A built artifact imports the removed OTel SDK.",
+      "remedy": "Delete the dependency and rebuild."
+    },
+    {
+      "id": "artifact.otlp-sdk-identifier",
+      "needle": "OTLPExporterBase",
+      "severity": "blocker",
+      "evidence": "packages/telemetry/otel/src/transport.ts (upstream)",
+      "reason": "A built artifact contains the removed OTLP exporter class.",
+      "remedy": "Rebuild after removing the source path that emits it."
+    },
+    {
+      "id": "artifact.session-log-upload-field",
+      "needle": "dsh_session_log",
+      "severity": "blocker",
+      "evidence": "packages/session/session-log-deepseek/src/types.ts (upstream)",
+      "reason": "A built artifact still contributes the removed Session-log upload field.",
+      "remedy": "Delete the plugin and rebuild."
+    },
+    {
+      "id": "artifact.plugin-inventory-field",
+      "needle": "dsh_plugin_packages",
+      "severity": "blocker",
+      "evidence": "packages/llm/plugin-package-inventory-deepseek/src/types.ts (upstream)",
+      "reason": "A built artifact still contributes the removed package-inventory field.",
+      "remedy": "Delete the plugin and rebuild."
+    },
+    {
+      "id": "artifact.phone-home-marker",
+      "needle": "navigator.sendBeacon",
+      "severity": "blocker",
+      "evidence": "prospective: phone-home beacon",
+      "reason": "A built artifact can send a fire-and-forget request.",
+      "remedy": "Identify the emitter; if it is a vendored dev-only bundle, add a narrow path scope with the reason."
+    }
+  ],
+  "scopes": [
+    {
+      "id": "gate-tooling",
+      "globs": ["fork/**"],
+      "required": false,
+      "appliesTo": [
+        "static.stripped-name-reference",
+        "static.stripped-identifier",
+        "static.stripped-file-reference",
+        "telemetry.endpoint-host",
+        "telemetry.otlp-collector-url",
+        "telemetry.otlp-channel-header",
+        "telemetry.otlp-sdk-import",
+        "telemetry.otlp-sdk-identifier",
+        "telemetry.otlp-env-read",
+        "telemetry.session-log-upload-field",
+        "telemetry.plugin-inventory-field",
+        "telemetry.session-log-upload-path",
+        "telemetry.analytics-sdk",
+        "telemetry.send-beacon",
+        "telemetry.phone-home-endpoint",
+        "telemetry.telemetry-named-file"
+      ],
+      "reason": "The gate tooling and the policy fragments declare the stripped surface as their denylist; scanning files that contain the pattern definitions is self-referential. Optional because a foreign root scanned through --root carries no fork/ directory."
+    },
+    {
+      "id": "agent-notes",
+      "globs": [".agents/notes/**"],
+      "appliesTo": [
+        "static.stripped-name-reference",
+        "static.stripped-identifier",
+        "static.stripped-file-reference",
+        "telemetry.endpoint-host",
+        "telemetry.otlp-collector-url",
+        "telemetry.otlp-channel-header",
+        "telemetry.otlp-sdk-import",
+        "telemetry.otlp-sdk-identifier",
+        "telemetry.otlp-env-read",
+        "telemetry.session-log-upload-field",
+        "telemetry.plugin-inventory-field",
+        "telemetry.session-log-upload-path",
+        "telemetry.analytics-sdk",
+        "telemetry.send-beacon",
+        "telemetry.phone-home-endpoint",
+        "telemetry.telemetry-named-file"
+      ],
+      "reason": "Agent Notes are frozen historical design records (AGENTS.md archive policy); they describe the upstream design that the fork removed and must never be rewritten to satisfy a content rule."
+    },
+    {
+      "id": "persistence-records",
+      "globs": ["docs/persistence-changes/**"],
+      "appliesTo": [
+        "static.stripped-name-reference",
+        "static.stripped-identifier",
+        "telemetry.session-log-upload-field",
+        "telemetry.plugin-inventory-field"
+      ],
+      "reason": "Released persistence-format records and historical schemas are immutable evidence of what shipped; they name the persisted event types readers must still accept."
+    },
+    {
+      "id": "upgrade-guides",
+      "globs": ["docs/upgrade-guide/**"],
+      "appliesTo": [
+        "static.stripped-name-reference",
+        "static.stripped-identifier",
+        "telemetry.session-log-upload-field",
+        "telemetry.plugin-inventory-field",
+        "telemetry.otlp-env-read",
+        "telemetry.session-log-upload-path"
+      ],
+      "reason": "The removal must be documented by name: the privacy-egress-removed guide tells users which keys, endpoints, and fields no longer exist."
+    },
+    {
+      "id": "recorded-sessions",
+      "globs": ["snapshots/**"],
+      "appliesTo": [
+        "static.stripped-name-reference",
+        "static.stripped-identifier",
+        "telemetry.session-log-upload-field",
+        "telemetry.plugin-inventory-field",
+        "telemetry.session-log-upload-path"
+      ],
+      "reason": "Recorded session and replay fixtures are released Session data; they contain the historical delivery-accepted watermark and must stay readable (AGENTS.md persistence rules). Composition files under snapshots/ are still checked by the composition rule."
+    },
+    {
+      "id": "generated-site",
+      "globs": ["website/.generated/**", "website/.dist/**"],
+      "required": false,
+      "appliesTo": [
+        "static.stripped-name-reference",
+        "static.stripped-identifier",
+        "telemetry.session-log-upload-field",
+        "telemetry.plugin-inventory-field"
+      ],
+      "reason": "A generated projection of the frozen documentation and persistence catalogs, plus the built VitePress output of that projection; both are regenerated from their sources and both are gitignored build output, so a tree without a built site reports the scope as unverified rather than stale."
+    },
+    {
+      "id": "recorded-npm-resolution",
+      "globs": ["pnpm-lock.yaml", "scripts/dependency-catalog/**", "docs/dependency-catalog.json"],
+      "appliesTo": ["static.stripped-identifier", "telemetry.otlp-sdk-import"],
+      "reason": "Recorded npm resolutions: the lockfile carries @opentelemetry/api as a peer of vitest, and the dependency catalog records the published @deepseek-ai/dsh package, whose closure still contains the removed plugins."
+    },
+    {
+      "id": "frozen-format-surfaces",
+      "globs": [
+        "packages/session/session-format-v*/**",
+        "packages/session/session-format-catalog/**"
+      ],
+      "appliesTo": ["static.stripped-identifier"],
+      "reason": "Every versioned Session-format reader, migration, and catalog is a frozen contract for released logs; they must keep recognizing the historical event type or released sessions stop loading."
+    },
+    {
+      "id": "persistence-test-guards",
+      "globs": [
+        "packages/session/session-persistence-jsonl/tests/**",
+        "packages/test-support/session-snapshot/**"
+      ],
+      "appliesTo": ["static.stripped-identifier"],
+      "reason": "The persistence tests and the recorded-session replay normalizer pin the historical event type; their assertions describe the released data the fork must keep reading."
+    },
+    {
+      "id": "python-recorded-replay",
+      "globs": ["python/sdk/tests/**", "scripts/smoke-python-runtime.py"],
+      "appliesTo": ["static.stripped-identifier"],
+      "reason": "The Python SDK tests and the keyless runtime smoke replay recorded sessions whose event log carries the historical delivery-accepted watermark."
+    },
+    {
+      "id": "recorded-snapshot-output",
+      "globs": ["scripts/snapshots/**"],
+      "appliesTo": [
+        "static.stripped-name-reference",
+        "static.stripped-identifier",
+        "telemetry.session-log-upload-field",
+        "telemetry.plugin-inventory-field",
+        "telemetry.session-log-upload-path",
+        "telemetry.telemetry-named-file"
+      ],
+      "reason": "Recorded Python SDK snapshot outputs: released Session data and its golden results, which must stay byte-comparable with the current readers."
+    },
+    {
+      "id": "local-crash-diagnostics",
+      "globs": ["apps/desktop/src/crash-report.ts", "apps/desktop/tests/crash-report.spec.ts"],
+      "appliesTo": ["telemetry.telemetry-named-file"],
+      "reason": "Desktop fatal-failure diagnostics are written to local files only and are never uploaded; the file name matches the telemetry naming heuristic."
+    },
+    {
+      "id": "vendored-devtools-assets",
+      "globs": ["packages/experimental/inspector/**"],
+      "appliesTo": ["artifact.phone-home-marker"],
+      "reason": "The dev-only inspector bundles vendored Lighthouse devtools assets, whose own report viewer uses navigator.sendBeacon; the inspector is not part of a shipped profile composition."
+    }
+  ],
+  "justifiedResiduals": [
+    {
+      "id": "known-event-type-persistence-compat",
+      "ruleId": "static.stripped-identifier",
+      "path": "packages/core/session/src/known-event-types.ts",
+      "pattern": "session-log-deepseek",
+      "count": 1,
+      "reason": "This is the generated event vocabulary shared by the persistence readers. Sessions recorded before the strip contain 'session-log-deepseek/delivery-accepted', and released Session data cannot be broken (AGENTS.md persistence rules), so the type stays in KNOWN_SESSION_EVENT_TYPES even though the writer is gone. Removing the line would make released logs unreadable.",
+      "evidence": "commit ab190ee883 (Finish the telemetry strip after the upstream sync) and the generator scripts/gen-persistence-catalog.ts"
+    },
+    {
+      "id": "persistence-catalog-generator-comment",
+      "ruleId": "static.stripped-identifier",
+      "path": "scripts/gen-persistence-catalog.ts",
+      "pattern": "session-log-deepseek/delivery-accepted",
+      "count": 1,
+      "reason": "The generator comment states why the historical type stays in the generated vocabulary; deleting the comment would leave the retained entry unexplained.",
+      "evidence": "scripts/gen-persistence-catalog.ts"
+    },
+    {
+      "id": "persistence-catalog-generator-manifest-comment",
+      "ruleId": "static.stripped-name-reference",
+      "path": "scripts/gen-persistence-catalog.ts",
+      "pattern": "@deepseek-ai/dsh-session-log-deepseek",
+      "count": 1,
+      "reason": "The same comment names the removed writer package that produced the watermark.",
+      "evidence": "scripts/gen-persistence-catalog.ts"
+    },
+    {
+      "id": "published-dependency-catalog",
+      "ruleId": "static.stripped-name-reference",
+      "path": "docs/dependency-catalog.json",
+      "pattern": "@deepseek-ai/dsh-(otel|client-product-analytics|client-ui-settings-session-log|host-product-telemetry-otel|plugin-package-inventory-deepseek|session-log-deepseek|session-telemetry|session-telemetry-otel)",
+      "count": 8,
+      "reason": "Generated from a recorded public-npm resolution of the released @deepseek-ai/dsh package, not from this tree: the published closure still contains the removed plugins. Regenerating it needs network access and a new release, and rewriting it here would falsify a recorded dependency resolution.",
+      "evidence": "scripts/gen-dependency-catalog.ts (reads scripts/dependency-catalog/package-lock.json)"
+    },
+    {
+      "id": "published-package-lockfile",
+      "ruleId": "static.stripped-name-reference",
+      "path": "scripts/dependency-catalog/package-lock.json",
+      "pattern": "@deepseek-ai/dsh-(otel|client-product-analytics|client-ui-settings-session-log|host-product-telemetry-otel|plugin-package-inventory-deepseek|session-log-deepseek|session-telemetry|session-telemetry-otel)",
+      "count": 14,
+      "reason": "The recorded npm lockfile for that published resolution; it is input evidence for docs/dependency-catalog.json and is not an install source for this workspace.",
+      "evidence": "scripts/gen-dependency-catalog.ts"
+    },
+    {
+      "id": "base-bundle-absence-assertions",
+      "ruleId": "static.stripped-identifier",
+      "path": "packages/bundle/base/tests/base.spec.ts",
+      "pattern": "(plugin-package-inventory-deepseek|session-telemetry-otel)",
+      "count": 2,
+      "reason": "These assertions require the shipped base bundle to compose no stripped plugin row; they name the plugins in order to prove their absence.",
+      "evidence": "packages/bundle/base/tests/base.spec.ts"
+    },
+    {
+      "id": "provider-request-absence-assertion-log-field",
+      "ruleId": "telemetry.session-log-upload-field",
+      "path": "packages/llm/llm-pi-ai/tests/adapter.spec.ts",
+      "pattern": "dsh_session_log",
+      "count": 1,
+      "reason": "The assertion requires the provider request to omit the removed upload field; it names the field in order to prove its absence.",
+      "evidence": "packages/llm/llm-pi-ai/tests/adapter.spec.ts"
+    },
+    {
+      "id": "provider-request-absence-assertion-inventory-field",
+      "ruleId": "telemetry.plugin-inventory-field",
+      "path": "packages/llm/llm-pi-ai/tests/adapter.spec.ts",
+      "pattern": "dsh_plugin_packages",
+      "count": 1,
+      "reason": "The assertion requires the provider request to omit the removed package-inventory field.",
+      "evidence": "packages/llm/llm-pi-ai/tests/adapter.spec.ts"
+    }
+  ]
+}

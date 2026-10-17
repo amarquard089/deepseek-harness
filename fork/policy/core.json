@@ -1,0 +1,90 @@
+{
+  "schema": "dsh-fork-policy-core/v1",
+  "policyRevision": "2026-10-17",
+  "fork": {
+    "upstreamRemote": "upstream",
+    "upstreamBranch": "master",
+    "originRemote": "origin",
+    "protectedBranch": "master"
+  },
+  "hardRequirement": [
+    "No telemetry collection, product analytics, crash/error reporting, session-log upload, or phone-home may be active in any shipped profile.",
+    "No outbound network request may originate from the harness except model inference, web search/fetch, and MCP servers explicitly configured by the repository owner.",
+    "A new upstream change may be merged into the protected branch only when every gate in forkpolicy.gates reports status=pass for that exact commit.",
+    "If any gate fails or errors, the sync stays on a side branch: it must not reach the protected branch."
+  ],
+  "strippedPackagePaths": [
+    "packages/telemetry",
+    "packages/client/product-analytics",
+    "packages/client/ui-settings-session-log",
+    "packages/host/product-telemetry-otel",
+    "packages/llm/plugin-package-inventory-deepseek",
+    "packages/session/session-log-deepseek",
+    "packages/session/session-telemetry",
+    "packages/session/session-telemetry-otel"
+  ],
+  "strippedDocumentationPaths": [
+    "docs/subsystems/otel.md",
+    "docs/subsystems/product-telemetry.md",
+    "docs/subsystems/session-telemetry.md"
+  ],
+  "strippedPackageNames": [
+    "@deepseek-ai/dsh-otel",
+    "@deepseek-ai/dsh-client-product-analytics",
+    "@deepseek-ai/dsh-client-ui-settings-session-log",
+    "@deepseek-ai/dsh-host-product-telemetry-otel",
+    "@deepseek-ai/dsh-plugin-package-inventory-deepseek",
+    "@deepseek-ai/dsh-session-log-deepseek",
+    "@deepseek-ai/dsh-session-telemetry",
+    "@deepseek-ai/dsh-session-telemetry-otel"
+  ],
+  "strippedFilePaths": [
+    "apps/cli/tests/telemetry-switch.spec.ts",
+    "apps/web/tests/feedback-release.e2e.ts",
+    "apps/web/tests/session-log-upload.e2e.ts",
+    "packages/bundle/web-app/tests/product-analytics.spec.ts",
+    "packages/client/ui-conversation/src/client/input/submission-analytics.ts",
+    "packages/client/ui-plugin-manager/src/client/sanitize-install-input.ts",
+    "packages/client/ui-plugin-manager/tests/sanitize-install-input.client.spec.ts"
+  ],
+  "strippedFilePathsNote": "Files the strip removed outside the stripped package and documentation trees, derived from `git diff --name-status --diff-filter=D <upstream merge base>..master`. Any surviving reference to one of these paths is strip residue: a stale tsconfig include entry, a composition row, a snapshot expectation or an import. Two further nonexistent entries in tsconfig.host.json (window-controls.e2e.ts, conversation-column-overflow.e2e.ts) are upstream's own stale config, unrelated to telemetry, and are deliberately not part of this list.",
+
+  "requirements": {
+    "forbidForbiddenDependencies": true,
+    "forbidStrippedPackageReferences": true,
+    "forbidForbiddenContent": true,
+    "requireJustifiedResiduals": true,
+    "requireKnownEventTypeCompatibility": true
+  },
+  "mergePolicy": {
+    "mergeOnGreen": true,
+    "pushOnGreen": true,
+    "protectedBranch": "master",
+    "syncBranchPrefix": "sync/upstream-",
+    "backupBranchPrefix": "backup/master-pre-upstream-sync-"
+  },
+  "ownerDecisions": {
+    "confirmedOn": "2026-10-17",
+    "mergeOnGreen": "The owner authorized the daily job to merge into master and push to origin when every required gate passes, and to stop at a side branch when any gate fails.",
+    "scheduling": "In-session daily reminder at 08:00 Europe/Berlin; no launchd job is installed.",
+    "scheduleId": "schedule-0e45163f-99a8-40d0-817c-f32055c5aa79"
+  },
+  "reports": {
+    "directory": "fork/reports",
+    "retainDays": 90
+  },
+  "gates": [
+    {
+      "id": "static",
+      "command": "node fork/verify-static.mjs",
+      "required": true,
+      "description": "Deletions, dependencies, composition, artifacts, residual references."
+    },
+    {
+      "id": "egress",
+      "command": "node fork/verify-egress.mjs",
+      "required": true,
+      "description": "Runtime proof that no non-allowlisted outbound connection is attempted."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# Gate and sync outputs are local evidence, not repository content.
+reports/
+state/
+worktrees/
+*.log
+
+# The repository root ignores every `lib/` as a build output. This directory holds
+# real sources, so re-include it; without this the tooling silently disappears
+# from commits while still working locally.
+!lib/
