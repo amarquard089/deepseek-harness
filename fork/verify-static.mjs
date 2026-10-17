@@ -12,15 +12,20 @@
 //   3. no workspace manifest declares a forbidden analytics, OTLP, or
 //      crash-reporting dependency, and every manifest was actually checked;
 //   4. no profile, bundle, snapshot fixture, or generated catalog composes a
-//      stripped plugin, with rows that only disable one reported as inert;
+//      stripped plugin: only a row that disables itself and names no module is
+//      treated as inert, a reference that survives only in a comment is a
+//      warning, and an unreadable composition file is itself a violation;
 //   5. built output carries no telemetry endpoint or OTel SDK marker (absent
 //      artifacts are reported as a note, never skipped silently);
 //   6. content heuristics discover telemetry that is not yet on the denylist.
 //
-// Every suppression is a justifiedResiduals entry that the same run re-validates
-// against the tree, so a residual cannot outlive the reason for it. The two bulk
-// scans overlap their reads to a bounded concurrency and preserve job order, so
-// two runs over one tree produce the same report.
+// Every suppression is a justifiedResiduals entry whose own matched span the
+// same run re-validates, so a residual cannot outlive the reason for it and
+// cannot hide a different stripped name in the same file. A path the walk could
+// not read is reported as a violation, so "we could not look" is never mistaken
+// for "we looked and found nothing". The two bulk scans overlap their reads to a
+// bounded concurrency and preserve job order, so two runs over one tree produce
+// the same report.
 //
 // Usage: node fork/verify-static.mjs [--root <path>] [--json <path>] [--quiet]
 //   --root scans another tree with this fork's policy, which is how a sync

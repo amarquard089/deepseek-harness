@@ -187,12 +187,15 @@ The static gate stays green with visible warnings rather than suppressing them. 
 understood:
 
 - `static.transitive-telemetry-package`: `@earendil-works/pi-telemetry` sits in the lockfile closure
-  of `@earendil-works/pi-ai`. Reviewed on 2026-10-17 and found inert: `pi-ai` imports it **type-only**
-  (`import type { TelemetryContext }` in `dist/types.d.ts`; the other hit is source-map text), the
-  package documents itself as contracts only — "no exporter, global current-span state, or dependency
-  on a telemetry backend" — its `dist/*.js` contains no network primitives, and no file under
-  `packages/` or `apps/` references it. It stays a warning because static analysis cannot prove
-  runtime inertness; the egress gate is the owner of that proof.
+  of `@earendil-works/pi-ai`, which declares it as a runtime dependency. Reviewed on 2026-10-17 and
+  found inert: the package has no dependencies of its own, none of its six runtime files contains a
+  network primitive, it reads no environment and mutates no global, its whole entry point is 826
+  bytes exporting a no-op context and an in-memory reference adapter, and `pi-ai` reaches it only
+  through `import type` in `dist/types.d.ts` (the other hit is source-map text) — no runtime `.js`
+  imports it at all. Decisively, `startSpan` is never called anywhere in `pi-ai`'s 196 runtime files,
+  `telemetryContext` is only passed through, and no harness package supplies one. The warning stands
+  because a lockfile dependency is what static analysis can see, and the emitted import being
+  type-only is a runtime fact; the egress gate owns that proof.
 - `static.composition-stripped-plugin` on `snapshots/**/cordis*.yml`: rows that only *disable* a
   removed plugin (no module name), so nothing can be composed. They are inert, and they are recorded
   expectations, so removing them risks breaking recorded-session replay for no telemetry benefit.

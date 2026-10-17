@@ -15,6 +15,8 @@ export const RULE_IDS = {
   forbiddenDependency: 'static.forbidden-dependency',
   transitiveTelemetryPackage: 'static.transitive-telemetry-package',
   compositionStrippedPlugin: 'static.composition-stripped-plugin',
+  compositionUnread: 'static.composition-unread',
+  unreadablePath: 'static.unreadable-path',
   artifactMarker: 'static.artifact-telemetry-marker',
   staleResidual: 'static.stale-residual',
   unmatchedScope: 'static.unmatched-scope',
