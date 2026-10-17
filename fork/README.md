@@ -148,21 +148,34 @@ invariant is what stops a conflict resolution from quietly deleting a feature.
 
 ## Observed evidence
 
-Recorded on 2026-10-17 against `master` (`763aa8264e`, upstream `1600d8a1e1`):
+Recorded on 2026-10-17. The first real sync (`853a7cb972`) brought in the nine upstream commits
+through `687f282e8`, and every gate passed for that exact commit before it landed:
 
-- `node fork/verify-static.mjs` → exit 0, 43108 checks, 0 blockers, 12 warnings.
+- `node fork/verify-static.mjs` → exit 0, 43259 checks, 0 blockers, 1 warning (the reviewed
+  `@earendil-works/pi-telemetry` closure).
 - `node fork/verify-egress.mjs` → exit 0, 29 interception records, 0 egress, 8 probes pass. Every
   profile probe's only records are the shim heartbeat, one tsx IPC pipe connect (Unix socket) and,
   for the web host, one loopback lookup. The self-check deliberately dials TEST-NET addresses and a
   `.invalid` name from the parent, a worker thread and a spawned child, and all of them are recorded.
-- Calibration: run against **pristine upstream**, the static gate reports 1167 findings and 1016
-  blockers (all 8 stripped package trees present, 412 identifier hits, 12 forbidden dependencies, 29
-  OTel SDK imports, collector hosts and channel headers). A gate that passes there would be vacuous.
+- `node fork/tests/adversarial-gate-checks.mjs` → 18/18 controls hold, 0 documented holes.
+- `node fork/tests/orchestrator-safety-checks.mjs` → 11/11 controls hold.
+- `pnpm run build:artifacts` → 7/7 passed; `pnpm run test:snapshot` green except one load-sensitive
+  case that passes three times out of three in isolation.
+- Calibration: against **pristine upstream** the static gate reports 1144 findings and 1002 blockers
+  (11 stripped paths present, 412 identifier hits, 48 composition blockers, 12 forbidden
+  dependencies, 29 OTel SDK imports, collector hosts and channel headers). A gate that passes there
+  would be vacuous. The composition blocker count rose from 39 to 48 when the row-parsing fix landed.
 - The static gate legitimately failed this repository before the tooling landed: three dead tsconfig
   `include` entries still named the deleted `session-log-upload` and `feedback-release` e2e tests.
   Removing exactly those three made it green, which is how we know the gate is not simply stuck red.
-- The first real sync attempt against the nine pending upstream commits resolved 8 of 16 conflicts by
-  rule A and stopped on 8 that need the judgment described above. Nothing was merged.
+- Conflict outcome for the first sync: rule A resolved 8 of 16 automatically; the other 8 needed the
+  judgment above and were resolved by hand, with generated records regenerated rather than edited and
+  the fork's added paths re-verified afterwards.
+- Independent adversarial verification found six issues, all fixed and re-verified: composition
+  over-suppression (an unrelated `disabled: true` downgraded an actively composed plugin to a
+  warning), per-file residual suppression, silently skipped unreadable paths, unaccounted oversized
+  files, an empty gate list merging with zero verification, and a fork-local preservation check that
+  passed after checking nothing. The last two would each have let the daily job merge without proof.
 
 ## Rollback
 
@@ -218,3 +231,12 @@ understood:
 - The gates prove the telemetry property. They say nothing about whether a conflict resolution kept
   the product working — that is what the build in step 6 and the fork-local preservation invariant
   are for, and neither replaces the repository's own test suite.
+- A profile probe that never becomes live currently reports as a probe failure (exit 1) rather than
+  as an unprovable run (exit 2). Both refuse to pass, so the hard requirement holds either way; the
+  distinction is only that "we could not look" would be more honest reported as an error.
+- The gates and the strip disagree about one tree: `fork/tests/**` legitimately names stripped
+  identifiers as test inputs, so the strip reports them as residual references. The static gate
+  exempts `fork/**` through its `gate-tooling` scope, which is why this is harmless — but the strip
+  has no matching exemption.
+- Building is part of the proof, not an optimisation: skipping the build leaves the newly merged
+  client bundles absent, the web host cannot boot, and the egress gate correctly refuses to pass.
