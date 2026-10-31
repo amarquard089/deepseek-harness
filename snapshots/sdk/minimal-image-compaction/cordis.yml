@@ -1,1 +1,3 @@
-[]
+- insert:
+    - id: minimal-checkpoint-observer
+      name: './checkpoint-observer.mjs'

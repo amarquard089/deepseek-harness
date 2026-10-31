@@ -12,6 +12,9 @@
       "path": "../../packages/boot/app-boot"
     },
     {
+      "path": "../../packages/util/official-bundles"
+    },
+    {
       "path": "../../packages/util/home-paths"
     },
     {
@@ -28,6 +31,9 @@
     },
     {
       "path": "../../packages/util/atomic-write"
+    },
+    {
+      "path": "../../packages/util/file-drag"
     }
   ],
   "exclude": [

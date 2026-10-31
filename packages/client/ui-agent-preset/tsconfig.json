@@ -8,7 +8,7 @@
     "src"
   ],
   "references": [
-    {
+        {
       "path": "../locale/tsconfig.client.json"
     },
     {

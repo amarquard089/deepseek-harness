@@ -47,6 +47,7 @@ kind: "package-bundle"
 
 ### 你得到什么
 
+开箱即用，基于本核心构建的每个 profile 都提供：DeepSeek 模型连接（提供方与模型可配置，你还可以在设置中启用额外提供方）、完整工具集——文件编辑、shell 命令、web 搜索、HTTP(S) 抓取、subagent、任务与目标跟踪——可跨重启存活的持久会话，以及默认权限策略：把文件写入限制在工作区内，危险操作前征询许可。Web 抓取无需逐次审批，并且可以访问 loopback 与内网主机。反馈保存在会话日志中。后续记录等待下一次显式反馈；发送已授权批次无需进一步交互或模型调用。`DISABLED` 阻止 OTel 捕获。
 
 `subagent` 与 `subagent_fork` 都创建受管理的子任务，并立即返回 child id。使用 `send_message` 可引导活跃子任务，或在完成后继续其对话。[委派工具行为](../../subagent/tool-subagent/README.zh.md)说明了结果交付和后端能力。
 
