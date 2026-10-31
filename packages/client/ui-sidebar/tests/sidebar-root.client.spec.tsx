@@ -135,11 +135,6 @@ describe('SidebarRoot shell', () => {
 
 })
 
-describe('Windows caption New Session analytics', () => {
-  afterEach(() => { document.documentElement.removeAttribute('data-windows-titlebar') })
-
-})
-
 describe('Windows caption tooltips', () => {
   afterEach(() => { document.documentElement.removeAttribute('data-windows-titlebar') })
 

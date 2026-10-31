@@ -417,9 +417,3 @@ describe('sidebar launcher pins', () => {
     expect(layout.selectPanel).not.toHaveBeenCalled()
   })
 })
-
-describe('sidebar entry click analytics', () => {
-
-
-
-})
