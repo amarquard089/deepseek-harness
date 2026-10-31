@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
@@ -8,7 +9,18 @@ import SessionStore, { foldSurface, Session, SessionId } from '@deepseek-ai/dsh-
 import * as commandFeedback from '@deepseek-ai/dsh-command-feedback'
 import type { FeedbackRecord } from '@deepseek-ai/dsh-command-feedback/types'
 import { remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
-import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
+import { unsupportedModel, unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
+
+const { USER_ID, getOrCreateAnonymousUserId } = vi.hoisted(() => {
+  const USER_ID = '01234567-89ab-4cde-8f01-23456789abcd'
+  return { USER_ID, getOrCreateAnonymousUserId: vi.fn(() => USER_ID) }
+})
+
+vi.mock('@deepseek-ai/dsh-anonymous-user-id', () => ({
+  getOrCreateAnonymousUserId,
+}))
+
+beforeEach(() => getOrCreateAnonymousUserId.mockClear())
 
 interface Harness {
   readonly ctx: Context
@@ -25,6 +37,7 @@ function stubAgent(ctx: Context, id: string): { agent: Agent; session: Session }
     id: session.id,
     options: {},
     session,
+    model: unsupportedModel(),
     inbox: unsupportedInbox(),
     ctx: new Context(),
     get status() { return status },
@@ -42,6 +55,7 @@ function stubAgent(ctx: Context, id: string): { agent: Agent; session: Session }
 async function harness(): Promise<Harness> {
   const ctx = new Context()
   await ctx.plugin(CommandRuntime)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(SessionStore)
   const plugin = await ctx.plugin(commandFeedback)
@@ -119,6 +133,7 @@ describe('sessionFeedback Host Remote', () => {
       { text: 'the diff view is unreadable', category: 'product-interaction' },
       {},
     ])
+    expect(getOrCreateAnonymousUserId).not.toHaveBeenCalled()
   })
 
   it('reports session-not-found for a Session no live owner carries', async () => {
@@ -142,7 +157,7 @@ describe('/feedback human command', () => {
     const test = await harness()
     await expect(run(test, ' the diff view is unreadable')).resolves.toEqual({
       kind: 'success',
-      text: `Feedback recorded for session ${test.session.id}.`,
+      text: `Feedback recorded for session ${test.session.id}\nAnonymous user: ${USER_ID}.`,
     })
     expect(feedbackTexts(test.session)).toEqual(['the diff view is unreadable'])
     const commandRun = test.session.snapshotEvents().find(event => event.type === 'command/run')
@@ -202,8 +217,8 @@ describe('/feedback human command', () => {
       test.ctx.commands.execute(test.agent, '/feedback second', [], signal),
     ])
     expect(settled.map(item => item?.result)).toEqual([
-      { kind: 'success', text: `Feedback recorded for session ${test.session.id}.` },
-      { kind: 'success', text: `Feedback recorded for session ${test.session.id}.` },
+      { kind: 'success', text: `Feedback recorded for session ${test.session.id}\nAnonymous user: ${USER_ID}.` },
+      { kind: 'success', text: `Feedback recorded for session ${test.session.id}\nAnonymous user: ${USER_ID}.` },
     ])
     expect(feedbackTexts(test.session)).toEqual(['first', 'second'])
   })
@@ -228,6 +243,7 @@ describe('/feedback human command', () => {
     }
     await expect(run(test)).resolves.toEqual(expected)
     await expect(run(test, '   \n\t ')).resolves.toEqual(expected)
+    expect(getOrCreateAnonymousUserId).not.toHaveBeenCalled()
     expect(feedbackTexts(test.session)).toEqual([])
     const done = test.session.snapshotEvents().filter(event => event.type === 'command/done')
     expect(done.map(event => event.data.kind)).toEqual(['error', 'error'])

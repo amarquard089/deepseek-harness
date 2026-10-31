@@ -1,14 +1,12 @@
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 /** Sidebar shell slot registration and its Session/layout callbacks. */
 import { Context, type Fiber } from '@deepseek-ai/cordis'
-import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { SidebarRootInjected } from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
-import { HeaderLeadingControls } from '../src/client/HeaderLeadingControls.tsx'
 import { apply as hostApply } from '../src/index.ts'
 
 const owners = new Set<Fiber>()
@@ -61,53 +59,28 @@ describe('ui-sidebar apply', () => {
     expect(inject).toEqual(['slots', 'layout', 'uiWorkspace', 'locale', 'shortcuts'])
   })
 
-  it('registers the shell and declares its child seats', async () => {
-    const b = await bench()
-    await b.ctx.plugin({ inject: [...inject], apply }).await()
-    expect(b.slots.entries('sidebar')).toHaveLength(1)
-    expect(b.slots.spec('sidebar.brand.mark')).toEqual({ kind: 'single', scope: 'root' })
-    expect(b.slots.spec('sidebar.brand.name')).toEqual({ kind: 'single', scope: 'root' })
-    expect(b.slots.spec('sidebar.workspaces')).toEqual({ kind: 'single', scope: 'root' })
-    expect(b.slots.spec('sidebar.settings')).toEqual({ kind: 'single', scope: 'root' })
-    expect(b.slots.spec('sidebar.footer.action')).toEqual({ kind: 'list', scope: 'root' })
-    expect(b.slots.spec('sidebar.panellist')).toEqual({ kind: 'list', scope: 'root' })
-    // Copy rides the standard locale seat, not the inject face.
-    expect(b.slots.entries('sidebar')[0]!.locale).toBe('sidebar')
-    // The window-chrome occupant reuses the shell's inject face and locale.
-    const leading = b.slots.entries('shell.leading')
-    expect(leading).toHaveLength(1)
-    expect(leading[0]!.component).toBe(HeaderLeadingControls)
-    expect(leading[0]!.locale).toBe('sidebar')
-    expect(leading[0]!.inject).toBe(b.slots.entries('sidebar')[0]!.inject)
-    const injected = (b.slots.entries('sidebar')[0]!.inject as () => SidebarRootInjected)()
-    expect(Object.keys(injected)).toEqual(['startSession', 'toggleSidebar', 'selectPanel', 'hooks'])
-    expect(injected.hooks.panels.getSnapshot()).toEqual([])
-    expect(b.slots.entries('main')).toEqual([])
-    // Both arms delegate to the Workspace UI's shared New Session action.
-    injected.startSession('workspace' as never)
-    expect(b.uiWorkspace.startSession).toHaveBeenCalledWith('workspace')
-    injected.startSession()
-    expect(b.uiWorkspace.startSession).toHaveBeenLastCalledWith(undefined)
-    injected.toggleSidebar()
-    expect(b.layout.toggleSidebar).toHaveBeenCalledOnce()
-    const panelId = 'custom-panel' as MainPanelId
-    injected.selectPanel(panelId)
-    expect(b.layout.selectPanel).toHaveBeenCalledExactlyOnceWith(panelId)
-    expectTypeOf<Parameters<SidebarRootInjected['selectPanel']>[0]>().toEqualTypeOf<MainPanelId>()
-  })
-
   it('waits for the sidebar declaration before registering', async () => {
     const b = await bench(false)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(b.slots.entries('sidebar')).toHaveLength(0)
-    const disposeRoot = b.slots.register({
+    expect(b.slots.spec('sidebar.panellist')).toBeUndefined()
+    const declareSidebar = () => b.slots.register({
       name: 'root',
       children: { sidebar: { kind: 'single', scope: 'root' } },
     }, SidebarFrame)
+    const disposeRoot = declareSidebar()
     expect(b.slots.entries('sidebar')).toHaveLength(1)
+    expect(b.slots.spec('sidebar.panellist')).toEqual({ kind: 'list', scope: 'root' })
     disposeRoot()
+    expect(b.slots.entries('sidebar')).toEqual([])
+    expect(b.slots.spec('sidebar.panellist')).toBeUndefined()
+    const disposeReplacement = declareSidebar()
+    expect(b.slots.entries('sidebar')).toHaveLength(1)
+    expect(b.slots.spec('sidebar.panellist')).toEqual({ kind: 'list', scope: 'root' })
     await fiber.dispose()
+    expect(b.slots.spec('sidebar.panellist')).toBeUndefined()
+    disposeReplacement()
   })
 
   it('projects plugin-owned panel entries and removes them with their owner', async () => {

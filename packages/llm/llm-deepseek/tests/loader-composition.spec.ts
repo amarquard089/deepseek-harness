@@ -9,11 +9,13 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import SessionStore from '@deepseek-ai/dsh-session'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
 import { profileComposition } from '../../../settings/settings/tests/profile-composition.ts'
+import { getOrCreateAnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import DeepSeekLlmApiExtensionRegistry from '@deepseek-ai/dsh-deepseek-llm-api-extensions'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import { assemble } from './assemble.ts'
@@ -33,10 +35,11 @@ afterEach(async () => {
   root = undefined
   await closeMockServers()
   vi.unstubAllEnvs()
+  vi.restoreAllMocks()
 })
 
 async function loadComposition(
-  options: { withDynamic: boolean; baseURL: string; reuseRoot?: string },
+  options: { withDynamic: boolean; baseURL: string; reuseRoot?: string; enableSessionLog?: boolean },
 ): Promise<{ ctx: Context; settingsPath: string; credentialsPath: string }> {
   // A reused root is the restart case: the same harness home, its documents
   // exactly as the previous process left them.
@@ -55,10 +58,16 @@ async function loadComposition(
     "  name: '@deepseek-ai/dsh-llm'",
     '- id: session',
     "  name: '@deepseek-ai/dsh-session'",
+    '- id: session-projection',
+    "  name: '@deepseek-ai/dsh-session-projection'",
     '- id: agents',
     "  name: '@deepseek-ai/dsh-agent'",
+    "- name: '@deepseek-ai/dsh-session-projection'",
     '- id: deepseek-llm-api-extensions',
     "  name: '@deepseek-ai/dsh-deepseek-llm-api-extensions'",
+    ...options.enableSessionLog !== undefined
+      ? ['  config:', `    enabled: ${String(options.enableSessionLog)}`]
+      : [],
     ...options.withDynamic
       ? [
         '- id: credentials',
@@ -83,7 +92,9 @@ async function loadComposition(
   const modules = new Map<string, unknown>([
     ['@deepseek-ai/dsh-llm', LlmRuntime],
     ['@deepseek-ai/dsh-session', SessionStore],
+    ['@deepseek-ai/dsh-session-projection', SessionProjectionRegistry],
     ['@deepseek-ai/dsh-agent', AgentRegistry],
+    ['@deepseek-ai/dsh-session-projection', SessionProjectionRegistry],
     ['@deepseek-ai/dsh-deepseek-llm-api-extensions', DeepSeekLlmApiExtensionRegistry],
     ['@deepseek-ai/dsh-credentials-local', LocalCredentialProvider],
     ['@deepseek-ai/dsh-llm-deepseek-api-key', LlmDeepSeek],
@@ -115,6 +126,8 @@ async function loadComposition(
 describe('llm-deepseek real dynamic composition', () => {
   it('updates the model catalog when the stored API key is removed or added', async () => {
     vi.stubEnv('DEEPSEEK_API_KEY', '')
+    // The official endpoint's model listing is unavailable, so the route serves its built-in catalog offline.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(new Response(null, { status: 404 })))
     const { ctx } = await loadComposition({ withDynamic: true, baseURL: 'https://api.deepseek.com/anthropic' })
     const credentials = ctx.get('credentials')!
     const models = await ctx.llm.listModels('deepseek-official')
@@ -134,6 +147,33 @@ describe('llm-deepseek real dynamic composition', () => {
     } finally { resolve.mockRestore() }
   })
 
+  it('follows the official model listing and reloads it once the customized catalog is restored', async () => {
+    vi.stubEnv('DEEPSEEK_API_KEY', '')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const keys: Array<string | null> = []
+    const messages = { api_capabilities: { anthropic_messages: {} } }
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const request = new Request(input, init)
+      if (request.url !== 'https://api.deepseek.com/models') return Promise.reject(new Error(`unexpected request to ${request.url}`))
+      keys.push(request.headers.get('x-api-key'))
+      return Promise.resolve(new Response(JSON.stringify({ data: [
+        { id: 'deepseek-flash', ...messages },
+        { id: 'deepseek-v5', ...messages, client_requirements: { 'deepseek-harness': { min_version: '0.0.1' } } },
+      ] })))
+    })
+    const { ctx } = await loadComposition({ withDynamic: true, baseURL: 'https://api.deepseek.com/anthropic' })
+    const ids = async () => (await ctx.llm.listModels('deepseek-official')).map(model => model.id)
+    expect(await ids()).toEqual(['deepseek-flash', 'deepseek-v5'])
+
+    // The Models page writes these path operations for an edited catalog and for Restore defaults.
+    await ctx.settings.mutate(NS, [{ op: 'set', path: ['models'], value: [{ id: 'custom' }] }])
+    expect(await ids()).toEqual(['custom'])
+    expect(keys).toEqual(['boot-key'])
+    await ctx.settings.mutate(NS, [{ op: 'unset', path: ['models'] }])
+    expect(await ids()).toEqual(['deepseek-flash', 'deepseek-v5'])
+    expect(keys).toEqual(['boot-key', 'boot-key'])
+  })
+
   it('boots from cordis.yml and routes the next request after external settings and credential edits', async () => {
     vi.stubEnv('DEEPSEEK_API_KEY', '')
     const serverA = await mockServer([{ kind: 'sse', events: textEvents }])
@@ -143,7 +183,7 @@ describe('llm-deepseek real dynamic composition', () => {
     expect(ctx.settings.describe().map(entry => entry.ns)).toContain(NS)
     await assemble(ctx, { model: 'deepseek-v4-flash', messages: [] })
     expect(serverA.headers[0]?.['x-api-key']).toBe('boot-key')
-    expect(serverA.headers[0]).not.toHaveProperty('x-deepseek-harness-user-id')
+    expect(serverA.headers[0]?.['x-deepseek-harness-user-id']).toBe(getOrCreateAnonymousUserId())
 
     // External edits, exactly as a user or the web UI would leave them on disk.
     await writeFile(settingsPath, JSON.stringify([{ id: NS, config: { baseURL: serverB.url } }]))
